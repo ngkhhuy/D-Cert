@@ -11,10 +11,15 @@ connectDB();
 
 const app = express();
 
+const path = require('path');
+
 app.use(express.json()); 
 app.use(cors());         
 app.use(helmet());       
-app.use(morgan('dev'));  
+app.use(morgan('dev'));
+
+// Serve file PDF văn bằng đã cấp phát — truy cập qua /uploads/<docId>.pdf
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 app.get('/', (req, res) => {
     res.json({ 
