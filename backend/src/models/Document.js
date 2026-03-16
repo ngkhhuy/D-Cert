@@ -3,6 +3,12 @@ const mongoose = require('mongoose');
 const DocumentSchema = new mongoose.Schema({
   docId: { type: String, required: true, unique: true },
   docType: { type: String, enum: ['DIPLOMA', 'DECISION', 'TRANSCRIPT'], required: true },
+  // Phân loại bằng cấp — bắt buộc khi docType là DIPLOMA
+  degreeLevel: {
+    type: String,
+    enum: ['BACHELOR', 'ENGINEER', 'ARCHITECT', 'MASTER', 'DOCTOR'],
+    required: function() { return this.docType === 'DIPLOMA'; }
+  },
   holderName: { type: String, required: true },
   holderId: { type: String },
   
