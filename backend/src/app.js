@@ -23,11 +23,17 @@ app.get('/', (req, res) => {
     });
 });
 
-const authRoutes = require('./routes/authRoutes');
-const docRoutes = require('./routes/docRoutes');
+const authRoutes   = require('./routes/authRoutes');
+const docRoutes    = require('./routes/docRoutes');
+const verifyRoutes = require('./routes/verifyRoutes');
 
-app.use('/api/auth', authRoutes);
-app.use('/api/docs', docRoutes);
+// Public shortlink redirect — đặt ngoài /api để URL ngắn gọn: /v/:code
+const { redirectShortLink } = require('./controllers/verifyController');
+app.get('/v/:shortCode', redirectShortLink);
+
+app.use('/api/auth',   authRoutes);
+app.use('/api/docs',   docRoutes);
+app.use('/api/verify', verifyRoutes);
 
 const PORT = process.env.PORT || 3000;
 
