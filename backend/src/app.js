@@ -23,7 +23,9 @@ app.get('/', (req, res) => {
     });
 });
 
-// 6. Lắng nghe ở cổng PORT
+const authRoutes = require('./routes/authRoutes');
+app.use('/api/auth', authRoutes);
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
