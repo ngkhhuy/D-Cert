@@ -5,6 +5,9 @@ node_modules/
 dist/
 build/
 
+# generated files — PDF văn bằng, file upload tạm
+public/uploads/
+
 # environment variables
 .env
 .env.*
