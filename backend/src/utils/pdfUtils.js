@@ -13,16 +13,17 @@ const TEMPLATE_MAP = {
     DOCTOR:    'phoibang_tiensi.pdf',
 };
 
-// Tọa độ (x, y) và style cho từng trường trên phôi A4 ngang (842 × 595 pt)
+// Tọa độ (x, y) và style cho từng trường trên phôi A4 dọc (595 × 842 pt)
+// Gốc tọa độ pdf-lib: góc dưới-trái. y tăng lên trên.
 // Chỉnh lại sau khi có file phôi thật và đo tọa độ chính xác
 const FIELD_CONFIG = {
-    holderName:           { x: 421, y: 320, size: 22, bold: true },
-    holderId:             { x: 421, y: 285, size: 14 },
-    major:                { x: 421, y: 255, size: 14 },
-    degreeClassification: { x: 421, y: 225, size: 14 },
-    graduationYear:       { x: 421, y: 195, size: 14 },
-    docId:                { x: 150, y: 100, size: 11 },
-    qrCode:               { x: 690, y: 30,  width: 100, height: 100 },
+    holderName:           { x: 297, y: 480, size: 22, bold: true },
+    holderId:             { x: 297, y: 445, size: 14 },
+    major:                { x: 297, y: 415, size: 14 },
+    degreeClassification: { x: 297, y: 385, size: 14 },
+    graduationYear:       { x: 297, y: 355, size: 14 },
+    docId:                { x: 150, y: 160, size: 11 },
+    qrCode:               { x: 460, y: 40,  width: 100, height: 100 },
 };
 
 /**
