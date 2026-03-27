@@ -5,6 +5,7 @@ const ShortLink = require('../models/ShortLink');
 const { generateCertificatePDF } = require('../utils/pdfUtils');
 const { hashFile } = require('../utils/hashUtils');
 const { generateShortCode } = require('../utils/stringUtils');
+const blockchainService = require('../services/blockchainService');
 
 /**
  * @route   POST /api/docs/draft
@@ -104,12 +105,12 @@ const issueDocument = async (req, res) => {
         // Bước 4: Băm SHA256 file PDF vừa sinh
         const docHash = await hashFile(resolvedOutputPath);
 
-        // Bước 5: Giả lập txHash (Blockchain sẽ làm ở Giai đoạn 2)
-        const mockTxHash = '0xMOCK_' + docHash.substring(0, 16).toUpperCase();
+        // Bước 5: Ghi hash lên Sepolia Blockchain
+        const txHash = await blockchainService.issueOnChain(docHash);
 
         // Bước 6: Cập nhật Document trong DB
         doc.docHash  = docHash;
-        doc.txHash   = mockTxHash;
+        doc.txHash   = txHash;
         doc.status   = 'ACTIVE';
         await doc.save();
 
@@ -126,7 +127,7 @@ const issueDocument = async (req, res) => {
             data: {
                 docId:     doc.docId,
                 docHash,
-                txHash:    mockTxHash,
+                txHash,
                 verifyUrl,
                 pdfPath:   `/uploads/${doc.docId}.pdf`,
             }
