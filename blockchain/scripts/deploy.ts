@@ -1,33 +1,45 @@
-import { ethers } from "hardhat";
+import "hardhat";
+import * as dotenv from "dotenv";
+import { ethers, ContractFactory } from "ethers";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+dotenv.config();
 
 /**
- * Script deploy DocumentRegistry lên mạng đã cấu hình trong hardhat.config.ts
+ * Script deploy DocumentRegistry lên mạng Sepolia (hoặc local)
  *
  * Cách chạy:
- *   Local (Hardhat Network):  npx hardhat run scripts/deploy.ts
- *   Sepolia Testnet:          npx hardhat run scripts/deploy.ts --network sepolia
+ *   Sepolia: npx hardhat run scripts/deploy.ts --network sepolia
  */
 async function main(): Promise<void> {
-    // Lấy danh sách signer từ mạng — signer[0] là tài khoản deploy (admin)
-    const [deployer] = await ethers.getSigners();
+    // Đọc RPC URL và Private Key từ .env
+    const rpcUrl    = process.env.ALCHEMY_RPC_URL;
+    const privateKey = process.env.SIGNER_PRIVATE_KEY;
+
+    if (!rpcUrl)     throw new Error("ALCHEMY_RPC_URL chưa được điền trong .env");
+    if (!privateKey) throw new Error("SIGNER_PRIVATE_KEY chưa được điền trong .env");
+
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const deployer  = new ethers.Wallet(privateKey, provider);
 
     console.log("─────────────────────────────────────────────");
     console.log(" D-Cert — Deploying DocumentRegistry");
     console.log("─────────────────────────────────────────────");
     console.log(` Deployer (admin): ${deployer.address}`);
-
-    const balance = await ethers.provider.getBalance(deployer.address);
+    const balance = await provider.getBalance(deployer.address);
     console.log(` Số dư ví:         ${ethers.formatEther(balance)} ETH`);
     console.log("─────────────────────────────────────────────");
 
-    // Lấy ContractFactory đã được compile từ thư mục contracts/
-    const DocumentRegistry = await ethers.getContractFactory("DocumentRegistry");
+    // Đọc artifact (ABI + bytecode) do `npx hardhat compile` sinh ra
+    const artifactPath = resolve(
+        "artifacts/contracts/DocumentRegistry.sol/DocumentRegistry.json"
+    );
+    const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
 
-    // Deploy — gửi transaction lên mạng
     console.log(" Đang deploy contract...");
-    const contract = await DocumentRegistry.deploy();
-
-    // Chờ mạng xác nhận ít nhất 1 block
+    const factory  = new ContractFactory(artifact.abi, artifact.bytecode, deployer);
+    const contract = await factory.deploy();
     await contract.waitForDeployment();
 
     const contractAddress = await contract.getAddress();
