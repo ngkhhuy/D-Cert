@@ -141,4 +141,36 @@ const issueDocument = async (req, res) => {
     }
 };
 
-module.exports = { createDraft, issueDocument };
+/**
+ * @route   GET /api/docs
+ * @desc    Lấy danh sách tất cả văn bằng (có phân trang)
+ * @access  Private
+ */
+const getAllDocs = async (req, res) => {
+    try {
+        const docs = await Document.find()
+            .sort({ createdAt: -1 })
+            .select('docId docType degreeLevel holderName holderId status txHash createdAt');
+        res.json({ success: true, count: docs.length, data: docs });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+/**
+ * @route   GET /api/docs/:id
+ * @desc    Lấy chi tiết một văn bằng theo MongoDB _id
+ * @access  Private
+ */
+const getDocById = async (req, res) => {
+    try {
+        const doc = await Document.findById(req.params.id)
+            .populate('issuer', 'fullName username role');
+        if (!doc) return res.status(404).json({ success: false, message: 'Không tìm thấy văn bằng' });
+        res.json({ success: true, data: doc });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+module.exports = { createDraft, issueDocument, getAllDocs, getDocById };
