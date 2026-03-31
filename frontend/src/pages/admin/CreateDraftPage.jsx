@@ -100,8 +100,10 @@ function DiplomaPreview({ form }) {
 // ────────── Main Page ──────────
 export default function CreateDraftPage() {
     const navigate = useNavigate();
+    const [mode, setMode] = useState('manual');
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [pdfFile, setPdfFile] = useState(null);
     const [stats, setStats] = useState({ todayDrafts: 0, pending: 0, rejected: 0 });
 
     const [form, setForm] = useState({
@@ -116,6 +118,31 @@ export default function CreateDraftPage() {
     });
 
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    const buildPayload = () => ({
+        docId: form.docId,
+        docType: 'DIPLOMA',
+        degreeLevel: form.degreeLevel,
+        holderName: form.holderName,
+        holderId: form.holderId,
+        metadata: {
+            dob: form.dob,
+            major: form.major,
+            classification: form.classification,
+            graduationYear: form.graduationYear,
+        },
+    });
+
+    const createUploadDraft = async () => {
+        if (!pdfFile) {
+            throw new Error('Vui lòng chọn file PDF trước khi tạo bản nháp');
+        }
+        const fd = new FormData();
+        fd.append('file', pdfFile);
+        await api.post('/docs/draft/upload', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    };
 
     // Fetch stats từ docs list
     useEffect(() => {
@@ -135,52 +162,38 @@ export default function CreateDraftPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post('/docs/draft', {
-                docId: form.docId,
-                docType: 'DIPLOMA',
-                degreeLevel: form.degreeLevel,
-                holderName: form.holderName,
-                holderId: form.holderId,
-                metadata: {
-                    dob: form.dob,
-                    major: form.major,
-                    classification: form.classification,
-                    graduationYear: form.graduationYear,
-                },
-            });
-            toast.success('Đã tạo bản nháp PDF & QR Code!');
+            if (mode === 'upload') {
+                await createUploadDraft();
+                toast.success('Đã upload PDF và tạo bản nháp thành công!');
+            } else {
+                await api.post('/docs/draft', buildPayload());
+                toast.success('Đã tạo bản nháp PDF & QR Code!');
+            }
             setForm((f) => ({ ...f, docId: genDocId() }));
+            setPdfFile(null);
             setStats((s) => ({ ...s, todayDrafts: s.todayDrafts + 1, pending: s.pending + 1 }));
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Lỗi khi tạo bản nháp');
+            toast.error(err.response?.data?.message || err.message || 'Lỗi khi tạo bản nháp');
         } finally { setLoading(false); }
     };
 
     // Gửi lên BGH (tạo nháp rồi navigate sang docs list)
     const handleSubmitToBGH = async () => {
-        if (!form.holderName || !form.holderId) {
+        if (mode === 'manual' && (!form.holderName || !form.holderId)) {
             toast.error('Vui lòng điền đầy đủ Mã sinh viên và Họ tên');
             return;
         }
         setSubmitting(true);
         try {
-            await api.post('/docs/draft', {
-                docId: form.docId,
-                docType: 'DIPLOMA',
-                degreeLevel: form.degreeLevel,
-                holderName: form.holderName,
-                holderId: form.holderId,
-                metadata: {
-                    dob: form.dob,
-                    major: form.major,
-                    classification: form.classification,
-                    graduationYear: form.graduationYear,
-                },
-            });
+            if (mode === 'upload') {
+                await createUploadDraft();
+            } else {
+                await api.post('/docs/draft', buildPayload());
+            }
             toast.success('Đã gửi bản nháp lên Ban Giám Hiệu duyệt!');
             navigate('/admin/docs');
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Lỗi khi gửi bản nháp');
+            toast.error(err.response?.data?.message || err.message || 'Lỗi khi gửi bản nháp');
         } finally { setSubmitting(false); }
     };
 
@@ -216,87 +229,123 @@ export default function CreateDraftPage() {
                         </h3>
                         {/* Tabs */}
                         <div className="flex p-1 bg-gray-100 rounded-lg w-fit">
-                            <button className="px-5 py-2 text-sm font-semibold bg-white text-[#003b73] shadow-sm rounded-md">
+                            <button
+                                type="button"
+                                onClick={() => setMode('manual')}
+                                className={`px-5 py-2 text-sm rounded-md transition-colors ${
+                                    mode === 'manual'
+                                        ? 'font-semibold bg-white text-[#003b73] shadow-sm'
+                                        : 'font-medium text-gray-500 hover:text-[#003b73]'
+                                }`}
+                            >
                                 Nhập thủ công
                             </button>
-                            <button className="px-5 py-2 text-sm font-medium text-gray-500 hover:text-[#003b73] transition-colors">
-                                Upload file Excel
+                            <button
+                                type="button"
+                                onClick={() => setMode('upload')}
+                                className={`px-5 py-2 text-sm rounded-md transition-colors ${
+                                    mode === 'upload'
+                                        ? 'font-semibold bg-white text-[#003b73] shadow-sm'
+                                        : 'font-medium text-gray-500 hover:text-[#003b73]'
+                                }`}
+                            >
+                                Upload file PDF
                             </button>
                         </div>
                     </div>
 
                     <form id="draft-form" onSubmit={handleDraft}>
                         <div className="p-7 space-y-5">
-                            {/* Mã văn bản + Bậc học */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <FormField label="Mã Văn Bản">
+                            {mode === 'upload' && (
+                                <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                                    <p className="text-sm font-medium text-[#003b73] mb-2">Tải lên file PDF văn bản có sẵn để tạo bản nháp chờ ký duyệt</p>
                                     <input
-                                        value={form.docId}
-                                        onChange={(e) => set('docId', e.target.value)}
-                                        required
-                                        className="field-input"
-                                        placeholder="BKDN-2026-0001"
+                                        type="file"
+                                        accept=".pdf,application/pdf"
+                                        onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                                        className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-[#003b73] file:font-semibold hover:file:bg-gray-50"
                                     />
-                                </FormField>
-                                <FormField label="Bậc Đào Tạo">
-                                    <select value={form.degreeLevel} onChange={(e) => set('degreeLevel', e.target.value)} className="field-input appearance-none">
-                                        {DEGREE_LEVELS.map((d) => (
-                                            <option key={d.value} value={d.value}>{d.label}</option>
-                                        ))}
-                                    </select>
-                                </FormField>
-                            </div>
+                                    {pdfFile && (
+                                        <p className="text-xs text-gray-500 mt-2">Đã chọn: {pdfFile.name}</p>
+                                    )}
+                                    <p className="text-xs text-blue-700/80 mt-2">Khong can nhap metadata. He thong se tu tao draft va dong QR vao goc PDF.</p>
+                                </div>
+                            )}
 
-                            {/* MSSV + Họ tên */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <FormField label="Mã Sinh Viên">
-                                    <input
-                                        value={form.holderId}
-                                        onChange={(e) => set('holderId', e.target.value)}
-                                        required
-                                        className="field-input"
-                                        placeholder="VD: 102210xxx"
-                                    />
-                                </FormField>
-                                <FormField label="Họ và Tên">
-                                    <input
-                                        value={form.holderName}
-                                        onChange={(e) => set('holderName', e.target.value)}
-                                        required
-                                        className="field-input"
-                                        placeholder="VD: Nguyễn Văn A"
-                                    />
-                                </FormField>
-                            </div>
+                            {mode === 'manual' && (
+                                <>
+                                    {/* Mã văn bản + Bậc học */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <FormField label="Mã Văn Bản">
+                                            <input
+                                                value={form.docId}
+                                                onChange={(e) => set('docId', e.target.value)}
+                                                required
+                                                className="field-input"
+                                                placeholder="BKDN-2026-0001"
+                                            />
+                                        </FormField>
+                                        <FormField label="Bậc Đào Tạo">
+                                            <select value={form.degreeLevel} onChange={(e) => set('degreeLevel', e.target.value)} className="field-input appearance-none">
+                                                {DEGREE_LEVELS.map((d) => (
+                                                    <option key={d.value} value={d.value}>{d.label}</option>
+                                                ))}
+                                            </select>
+                                        </FormField>
+                                    </div>
 
-                            {/* Ngày sinh + Ngành học */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <FormField label="Ngày Sinh">
-                                    <input type="date" value={form.dob} onChange={(e) => set('dob', e.target.value)} className="field-input" />
-                                </FormField>
-                                <FormField label="Ngành Học">
-                                    <select value={form.major} onChange={(e) => set('major', e.target.value)} className="field-input appearance-none">
-                                        {MAJORS.map((m) => <option key={m}>{m}</option>)}
-                                    </select>
-                                </FormField>
-                            </div>
+                                    {/* MSSV + Họ tên */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <FormField label="Mã Sinh Viên">
+                                            <input
+                                                value={form.holderId}
+                                                onChange={(e) => set('holderId', e.target.value)}
+                                                required
+                                                className="field-input"
+                                                placeholder="VD: 102210xxx"
+                                            />
+                                        </FormField>
+                                        <FormField label="Họ và Tên">
+                                            <input
+                                                value={form.holderName}
+                                                onChange={(e) => set('holderName', e.target.value)}
+                                                required
+                                                className="field-input"
+                                                placeholder="VD: Nguyễn Văn A"
+                                            />
+                                        </FormField>
+                                    </div>
 
-                            {/* Xếp loại + Năm TN */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <FormField label="Xếp Loại Tốt Nghiệp">
-                                    <select value={form.classification} onChange={(e) => set('classification', e.target.value)} className="field-input appearance-none">
-                                        {CLASSIFICATIONS.map((c) => <option key={c}>{c}</option>)}
-                                    </select>
-                                </FormField>
-                                <FormField label="Năm Tốt Nghiệp">
-                                    <input
-                                        type="number" min="2000" max="2100"
-                                        value={form.graduationYear}
-                                        onChange={(e) => set('graduationYear', e.target.value)}
-                                        className="field-input"
-                                    />
-                                </FormField>
-                            </div>
+                                    {/* Ngày sinh + Ngành học */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <FormField label="Ngày Sinh">
+                                            <input type="date" value={form.dob} onChange={(e) => set('dob', e.target.value)} className="field-input" />
+                                        </FormField>
+                                        <FormField label="Ngành Học">
+                                            <select value={form.major} onChange={(e) => set('major', e.target.value)} className="field-input appearance-none">
+                                                {MAJORS.map((m) => <option key={m}>{m}</option>)}
+                                            </select>
+                                        </FormField>
+                                    </div>
+
+                                    {/* Xếp loại + Năm TN */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <FormField label="Xếp Loại Tốt Nghiệp">
+                                            <select value={form.classification} onChange={(e) => set('classification', e.target.value)} className="field-input appearance-none">
+                                                {CLASSIFICATIONS.map((c) => <option key={c}>{c}</option>)}
+                                            </select>
+                                        </FormField>
+                                        <FormField label="Năm Tốt Nghiệp">
+                                            <input
+                                                type="number" min="2000" max="2100"
+                                                value={form.graduationYear}
+                                                onChange={(e) => set('graduationYear', e.target.value)}
+                                                className="field-input"
+                                            />
+                                        </FormField>
+                                    </div>
+                                </>
+                            )}
 
                             <div className="pt-2 flex justify-end">
                                 <button
@@ -306,7 +355,11 @@ export default function CreateDraftPage() {
                                     style={{ fontFamily: 'Manrope, sans-serif' }}
                                 >
                                     <span className="material-symbols-outlined text-[20px]">qr_code_2</span>
-                                    {loading ? 'Đang sinh bản nháp...' : 'Sinh bản nháp PDF & QR Code'}
+                                    {loading
+                                        ? 'Đang xử lý...'
+                                        : mode === 'upload'
+                                            ? 'Upload PDF và tạo bản nháp'
+                                            : 'Sinh bản nháp PDF & QR Code'}
                                 </button>
                             </div>
                         </div>
@@ -329,9 +382,22 @@ export default function CreateDraftPage() {
                         </div>
                     </div>
                     <div className="flex-grow bg-[#e6e8ea] rounded-xl p-6 flex items-center justify-center min-h-[420px]">
-                        <div className="w-full max-w-[300px]">
-                            <DiplomaPreview form={form} />
-                        </div>
+                        {mode === 'upload' ? (
+                            <div className="w-full h-full rounded-xl border border-dashed border-gray-300 bg-white/70 flex flex-col items-center justify-center text-center p-6">
+                                <span className="material-symbols-outlined text-5xl text-[#003b73]/60 mb-3">picture_as_pdf</span>
+                                <p className="text-sm font-semibold text-[#003b73]">Xem trước chế độ Upload PDF</p>
+                                <p className="text-xs text-gray-500 mt-1">Sau khi tạo draft, hệ thống sẽ đóng QR vào góc phải dưới của file.</p>
+                                {pdfFile ? (
+                                    <p className="text-xs text-gray-600 mt-4 font-mono break-all">{pdfFile.name}</p>
+                                ) : (
+                                    <p className="text-xs text-gray-400 mt-4">Chưa chọn file PDF</p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="w-full max-w-[300px]">
+                                <DiplomaPreview form={form} />
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
