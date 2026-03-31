@@ -90,10 +90,12 @@ function ConfirmModal({ doc, onConfirm, onCancel, loading }) {
 }
 
 // ────────── Doc Row ──────────
-function DraftRow({ doc, onIssue, issuingId }) {
+function DraftRow({ doc, onIssue, onPreview, issuingId, isSelected }) {
     const isLoading = issuingId === doc._id;
     return (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-5 hover:shadow-md transition-shadow">
+        <div className={`bg-white rounded-xl border shadow-sm p-5 flex items-center gap-5 hover:shadow-md transition-shadow ${
+            isSelected ? 'border-[#003b73]' : 'border-gray-100'
+        }`}>
             {/* Icon */}
             <div className="p-3 bg-blue-900/8 rounded-xl shrink-0">
                 <span className="material-symbols-outlined text-[28px] text-[#003b73]">description</span>
@@ -119,6 +121,13 @@ function DraftRow({ doc, onIssue, issuingId }) {
 
             {/* Actions */}
             <div className="flex items-center gap-2 shrink-0">
+                <button
+                    onClick={() => onPreview(doc._id)}
+                    className="p-2 text-gray-400 hover:text-[#003b73] hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Xem nội dung PDF chờ duyệt"
+                >
+                    <span className="material-symbols-outlined text-[20px]">preview</span>
+                </button>
                 <Link
                     to={`/admin/docs/${doc._id}`}
                     className="p-2 text-gray-400 hover:text-[#003b73] hover:bg-blue-50 rounded-lg transition-colors"
@@ -145,6 +154,59 @@ function DraftRow({ doc, onIssue, issuingId }) {
                     )}
                 </button>
             </div>
+        </div>
+    );
+}
+
+function PendingPdfPreview({ selectedDoc, loading }) {
+    if (loading) {
+        return (
+            <div className="h-full bg-white rounded-xl border border-gray-100 flex items-center justify-center">
+                <div className="h-7 w-7 animate-spin rounded-full border-4 border-[#003b73] border-t-transparent" />
+            </div>
+        );
+    }
+
+    if (!selectedDoc) {
+        return (
+            <div className="h-full bg-white rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center text-center p-6">
+                <span className="material-symbols-outlined text-5xl text-gray-300 mb-2">description</span>
+                <p className="text-sm text-gray-500">Chọn một tài liệu chờ duyệt để xem nội dung PDF.</p>
+            </div>
+        );
+    }
+
+    const storedName = selectedDoc.metadata?.sourcePdf?.storedName;
+    const pdfUrl = storedName ? `/uploads/drafts/${storedName}` : null;
+
+    if (!pdfUrl) {
+        return (
+            <div className="h-full bg-white rounded-xl border border-gray-100 p-6">
+                <h4 className="text-sm font-semibold text-[#003b73] mb-3">Xem trước tài liệu</h4>
+                <div className="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm text-amber-700">
+                    Ho so nay duoc tao tu form, chua co file PDF upload de xem truc tiep.
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full bg-white rounded-xl border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                    <p className="text-xs text-gray-400">Dang duyet</p>
+                    <p className="text-sm font-semibold text-[#003b73] font-mono">{selectedDoc.docId}</p>
+                </div>
+                <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-md bg-blue-50 text-[#003b73] hover:bg-blue-100 transition-colors"
+                >
+                    Mo tab moi
+                </a>
+            </div>
+            <iframe title={`pdf-preview-${selectedDoc._id}`} src={pdfUrl} className="w-full h-[650px] bg-gray-50" />
         </div>
     );
 }
@@ -193,6 +255,9 @@ export default function PendingApprovalPage() {
     const [issuingId, setIssuingId] = useState(null);
     const [confirmDoc, setConfirmDoc] = useState(null);
     const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'issued'
+    const [selectedDocId, setSelectedDocId] = useState(null);
+    const [selectedDocDetail, setSelectedDocDetail] = useState(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
 
     const fetchDocs = useCallback(() => {
         api.get('/docs')
@@ -213,11 +278,29 @@ export default function PendingApprovalPage() {
         try {
             await api.post(`/docs/issue/${confirmDoc._id}`);
             toast.success(`✅ Đã ký duyệt và ghi lên Blockchain!`);
+            if (selectedDocId === confirmDoc._id) {
+                setSelectedDocId(null);
+                setSelectedDocDetail(null);
+            }
             fetchDocs(); // reload
         } catch (err) {
             toast.error(err.response?.data?.message || 'Lỗi khi phát hành');
         } finally {
             setIssuingId(null);
+        }
+    };
+
+    const handleSelectPendingDoc = async (docId) => {
+        setSelectedDocId(docId);
+        setPreviewLoading(true);
+        try {
+            const res = await api.get(`/docs/${docId}`);
+            setSelectedDocDetail(res.data?.data || null);
+        } catch {
+            setSelectedDocDetail(null);
+            toast.error('Không thể tải nội dung tài liệu để xem trước');
+        } finally {
+            setPreviewLoading(false);
         }
     };
 
@@ -291,19 +374,27 @@ export default function PendingApprovalPage() {
                     ))}
                 </div>
 
-                {/* ── List ── */}
+                {/* ── List + Preview ── */}
                 {loading ? (
                     <div className="flex justify-center py-20">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#003b73] border-t-transparent" />
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                        <div className="xl:col-span-7 space-y-3">
                         {activeTab === 'pending' && (
                             pendingDocs.length === 0 ? (
                                 <EmptyState icon="check_circle" message="Không có bản nháp nào đang chờ duyệt" color="text-green-500" />
                             ) : (
                                 pendingDocs.map((doc) => (
-                                    <DraftRow key={doc._id} doc={doc} onIssue={setConfirmDoc} issuingId={issuingId} />
+                                    <DraftRow
+                                        key={doc._id}
+                                        doc={doc}
+                                        onIssue={setConfirmDoc}
+                                        onPreview={handleSelectPendingDoc}
+                                        issuingId={issuingId}
+                                        isSelected={selectedDocId === doc._id}
+                                    />
                                 ))
                             )
                         )}
@@ -315,6 +406,16 @@ export default function PendingApprovalPage() {
                                     <IssuedRow key={doc._id} doc={doc} />
                                 ))
                             )
+                        )}
+                        </div>
+
+                        {activeTab === 'pending' && (
+                            <div className="xl:col-span-5 min-h-[420px]">
+                                <PendingPdfPreview
+                                    selectedDoc={selectedDocDetail}
+                                    loading={previewLoading}
+                                />
+                            </div>
                         )}
                     </div>
                 )}
