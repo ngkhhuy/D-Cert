@@ -40,7 +40,7 @@ const redirectShortLink = async (req, res) => {
 
 /**
  * @route   GET /api/verify/hash/:hash
- * @desc    Tra cứu văn bằng theo docHash (SHA256) — đối chiếu DB, Phase 2 sẽ thêm on-chain lookup
+ * @desc    Tra cứu văn bằng theo docHash (SHA256) — đối chiếu DB
  * @access  Public
  */
 const verifyByHash = async (req, res) => {
@@ -73,12 +73,13 @@ const verifyByHash = async (req, res) => {
  * @access  Public
  */
 const verifyByUpload = async (req, res) => {
-    // Multer đã lưu file tạm vào req.file
-    if (!req.file) {
+    // Multer co the luu vao req.file (single) hoac req.files (fields)
+    const uploadedFile = req.file || req.files?.file?.[0] || req.files?.pdf?.[0];
+    if (!uploadedFile) {
         return res.status(400).json({ success: false, message: 'Vui lòng upload file PDF' });
     }
 
-    const tempPath = req.file.path;
+    const tempPath = uploadedFile.path;
     try {
         // Băm file vừa upload
         const computedHash = await hashFile(tempPath);

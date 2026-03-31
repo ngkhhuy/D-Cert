@@ -17,15 +17,24 @@ const upload = multer({
     },
 });
 
+// Ho tro ca field moi (`file`) va field cu (`pdf`) de tranh loi Unexpected field.
+const uploadVerifyPdf = upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'pdf', maxCount: 1 },
+]);
+
 // Middleware bắt lỗi multer (file sai định dạng, quá dung lượng)
 const handleMulterError = (err, req, res, next) => {
     if (err instanceof multer.MulterError || err.message === 'Chỉ chấp nhận file PDF') {
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ success: false, message: 'Truong file khong hop le. Vui long gui bang field `file`.' });
+        }
         return res.status(400).json({ success: false, message: err.message });
     }
     next(err);
 };
 
 router.get('/hash/:hash', verifyByHash);
-router.post('/upload', upload.single('file'), handleMulterError, verifyByUpload);
+router.post('/upload', uploadVerifyPdf, handleMulterError, verifyByUpload);
 
 module.exports = router;
