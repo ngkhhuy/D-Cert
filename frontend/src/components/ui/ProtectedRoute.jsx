@@ -13,7 +13,10 @@ export default function ProtectedRoute({ children, roles }) {
     }
 
     if (!user) return <Navigate to="/login" replace />;
-    if (roles && !roles.includes(user.role)) return <Navigate to="/admin" replace />;
+    if (roles && !roles.includes(user.role)) {
+        // STUDENT luôn về /student, các role khác về /admin
+        return <Navigate to={user.role === 'STUDENT' ? '/student' : '/admin'} replace />;
+    }
 
     return children;
 }

@@ -28,10 +28,11 @@ app.get('/', (req, res) => {
     });
 });
 
-const authRoutes   = require('./routes/authRoutes');
-const docRoutes    = require('./routes/docRoutes');
-const verifyRoutes = require('./routes/verifyRoutes');
-const { protect }  = require('./middlewares/authMiddleware');
+const authRoutes    = require('./routes/authRoutes');
+const docRoutes     = require('./routes/docRoutes');
+const verifyRoutes  = require('./routes/verifyRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const { protect }   = require('./middlewares/authMiddleware');
 
 // Public shortlink redirect — đặt ngoài /api để URL ngắn gọn: /v/:code
 const { redirectShortLink } = require('./controllers/verifyController');
@@ -42,9 +43,10 @@ app.get('/api/users/me', protect, (req, res) => {
     res.json({ success: true, data: req.user });
 });
 
-app.use('/api/auth',   authRoutes);
-app.use('/api/docs',   docRoutes);
-app.use('/api/verify', verifyRoutes);
+app.use('/api/auth',    authRoutes);
+app.use('/api/docs',    docRoutes);
+app.use('/api/verify',  verifyRoutes);
+app.use('/api/student', studentRoutes);
 
 const PORT = process.env.PORT || 3000;
 

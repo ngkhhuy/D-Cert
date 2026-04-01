@@ -8,7 +8,9 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!user) return;
-        if (user.role === 'OFFICER') {
+        if (user.role === 'STUDENT') {
+            navigate('/student', { replace: true });
+        } else if (user.role === 'OFFICER') {
             navigate('/admin/docs/new', { replace: true });
         } else {
             // SYS_ADMIN, SIGNER

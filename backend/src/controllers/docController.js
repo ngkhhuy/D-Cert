@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 const QRCode = require('qrcode');
+const { parse: parseCsv } = require('csv-parse/sync');
 const Document = require('../models/Document');
 const ShortLink = require('../models/ShortLink');
 const { generateCertificatePDF } = require('../utils/pdfUtils');
@@ -323,4 +324,272 @@ const getDocById = async (req, res) => {
     }
 };
 
-module.exports = { createDraft, createDraftFromUpload, issueDocument, getAllDocs, getDocById };
+/**
+ * @route   GET /api/student/feed
+ * @desc    Lấy danh sách văn bản đã phát hành gần đây (DECISION, TRANSCRIPT) cho SV xem
+ * @access  Private (STUDENT)
+ */
+const getStudentFeed = async (req, res) => {
+    try {
+        const docs = await Document.find({
+            status: 'ACTIVE',
+            docType: { $in: ['DECISION', 'TRANSCRIPT'] },
+        })
+            .populate('issuer', 'fullName')
+            .sort({ updatedAt: -1 })
+            .limit(30)
+            .select('docId docType holderName metadata txHash docHash createdAt updatedAt issuer');
+
+        res.json({ success: true, data: docs });
+    } catch (error) {
+        console.error('getStudentFeed error:', error);
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+/**
+ * @route   GET /api/student/diplomas
+ * @desc    Lấy văn bằng cá nhân của sinh viên đang đăng nhập
+ * @access  Private (STUDENT)
+ */
+const getMyDiplomas = async (req, res) => {
+    try {
+        const studentId = req.user.studentId || req.user.username;
+        const docs = await Document.find({
+            holderId: studentId,
+            status: 'ACTIVE',
+            docType: 'DIPLOMA',
+        })
+            .populate('issuer', 'fullName')
+            .sort({ updatedAt: -1 });
+
+        res.json({ success: true, data: docs });
+    } catch (error) {
+        console.error('getMyDiplomas error:', error);
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+/**
+ * @route   POST /api/student/docs/:id/receive
+ * @desc    Sinh viên nhận/tải văn bằng — ghi log lần đầu, trả về URL PDF
+ * @access  Private (STUDENT)
+ */
+const receiveDocument = async (req, res) => {
+    try {
+        const doc = await Document.findById(req.params.id);
+        if (!doc) return res.status(404).json({ success: false, message: 'Không tìm thấy văn bằng' });
+        if (doc.status !== 'ACTIVE') return res.status(400).json({ success: false, message: 'Văn bằng chưa được phát hành' });
+
+        // Chỉ sinh viên sở hữu văn bằng mới được tải
+        const studentId = req.user.studentId || req.user.username;
+        if (doc.holderId !== studentId) {
+            return res.status(403).json({ success: false, message: 'Bạn không có quyền tải văn bằng này' });
+        }
+
+        // Ghi nhận lần nhận đầu tiên
+        if (!doc.receivedAt) {
+            doc.receivedAt = new Date();
+            doc.receivedBy = req.user._id;
+            await doc.save();
+        }
+
+        res.json({
+            success: true,
+            pdfUrl: `/uploads/${doc.docId}.pdf`,
+            receivedAt: doc.receivedAt,
+        });
+    } catch (error) {
+        console.error('receiveDocument error:', error);
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+/**
+ * @route   POST /api/docs/draft/import-csv
+ * @desc    Import danh sách sinh viên từ file CSV → tạo nhiều bản nháp cùng lúc
+ * @access  Private (OFFICER, SYS_ADMIN)
+ *
+ * CSV format (header row required):
+ *   docId,holderName,holderId,degreeLevel,major,classification,graduationYear,dob
+ *   - docId: tùy chọn, nếu trống sẽ tự sinh
+ *   - degreeLevel: BACHELOR|ENGINEER|ARCHITECT|MASTER|DOCTOR
+ *   - Các cột còn lại: tùy chọn
+ */
+const importDraftsFromCsv = async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Vui lòng tải lên file CSV' });
+    }
+
+    let csvContent;
+    try {
+        csvContent = fs.readFileSync(req.file.path, 'utf8');
+    } finally {
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    }
+
+    let rows;
+    try {
+        rows = parseCsv(csvContent, {
+            columns: true,       // lấy header row làm key
+            skip_empty_lines: true,
+            trim: true,
+            bom: true,           // xử lý UTF-8 BOM nếu xuất từ Excel
+        });
+    } catch (parseErr) {
+        return res.status(400).json({ success: false, message: `File CSV không hợp lệ: ${parseErr.message}` });
+    }
+
+    if (!rows || rows.length === 0) {
+        return res.status(400).json({ success: false, message: 'File CSV trống hoặc không có dữ liệu hợp lệ' });
+    }
+
+    const year = new Date().getFullYear();
+    const results = { created: [], skipped: [], errors: [] };
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 2; // +2 vì row 1 là header
+
+        const holderName = (row.holderName || row.ho_ten || row['Họ tên'] || '').trim();
+        const holderId   = (row.holderId   || row.mssv   || row['MSSV']  || '').trim();
+        const degreeLevel = (row.degreeLevel || row.bac_hoc || row['Bậc học'] || 'ENGINEER').trim().toUpperCase();
+        const major      = (row.major || row.nganh || row['Ngành'] || '').trim();
+        const classification = (row.classification || row.xep_loai || row['Xếp loại'] || 'Khá').trim();
+        const graduationYear = (row.graduationYear || row.nam_tot_nghiep || row['Năm TN'] || String(year)).trim();
+        const dob        = (row.dob || row.ngay_sinh || row['Ngày sinh'] || '').trim();
+        let   docId      = (row.docId || row.ma_van_ban || row['Mã VB'] || '').trim();
+
+        if (!holderName) {
+            results.errors.push({ row: rowNum, reason: 'Thiếu holderName (Họ tên)' });
+            continue;
+        }
+
+        if (!VALID_DEGREE_LEVELS.includes(degreeLevel)) {
+            results.errors.push({ row: rowNum, holderName, reason: `degreeLevel không hợp lệ: "${degreeLevel}"` });
+            continue;
+        }
+
+        if (!docId) {
+            docId = `BKDN-${year}-${holderId || generateShortCode(6).toUpperCase()}`;
+        }
+
+        // Bỏ qua nếu docId đã tồn tại
+        const exists = await Document.findOne({ docId });
+        if (exists) {
+            results.skipped.push({ row: rowNum, docId, holderName, reason: 'docId đã tồn tại' });
+            continue;
+        }
+
+        try {
+            const doc = await Document.create({
+                docId,
+                docType: 'DIPLOMA',
+                degreeLevel,
+                holderName,
+                holderId,
+                metadata: { major, classification, graduationYear, dob },
+                issuer: req.user._id,
+            });
+            results.created.push({ docId: doc.docId, holderName, holderId });
+        } catch (err) {
+            results.errors.push({ row: rowNum, holderName, reason: err.message });
+        }
+    }
+
+    return res.status(207).json({
+        success: true,
+        message: `Import hoàn tất: ${results.created.length} tạo mới, ${results.skipped.length} bỏ qua, ${results.errors.length} lỗi`,
+        data: results,
+    });
+};
+
+/**
+ * @route   POST /api/docs/issue/batch
+ * @desc    Ký duyệt nhiều bản nháp cùng lúc (batch issue)
+ * @access  Private (SIGNER, SYS_ADMIN)
+ * @body    { ids: string[] }  — mảng MongoDB _id của các Document DRAFT
+ *
+ * Xử lý tuần tự từng document để tránh quá tải blockchain.
+ * Trả về kết quả từng item: success|error.
+ */
+const batchIssue = async (req, res) => {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, message: 'Vui lòng cung cấp mảng ids cần ký duyệt' });
+    }
+
+    if (ids.length > 50) {
+        return res.status(400).json({ success: false, message: 'Tối đa 50 văn bằng mỗi lần batch' });
+    }
+
+    const uploadDir = path.join(__dirname, '../../public/uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const results = { success: [], errors: [] };
+
+    for (const id of ids) {
+        let outputPath = null;
+        let uploadedDraftPath = null;
+        try {
+            const doc = await Document.findById(id);
+            if (!doc) { results.errors.push({ id, reason: 'Không tìm thấy document' }); continue; }
+            if (doc.status !== 'DRAFT') { results.errors.push({ id, docId: doc.docId, reason: `Trạng thái không hợp lệ: ${doc.status}` }); continue; }
+
+            const shortCode = generateShortCode(6);
+            const verifyUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/v/${shortCode}`;
+
+            outputPath = path.join(uploadDir, `${doc.docId}.pdf`);
+
+            const uploadedStoredName = doc.metadata?.sourcePdf?.storedName;
+            if (uploadedStoredName) {
+                uploadedDraftPath = path.join(uploadDir, 'drafts', uploadedStoredName);
+                if (!fs.existsSync(uploadedDraftPath)) {
+                    results.errors.push({ id, docId: doc.docId, reason: 'Không tìm thấy file PDF đã upload' });
+                    continue;
+                }
+                fs.copyFileSync(uploadedDraftPath, outputPath);
+                await stampPdfWithQr(outputPath, outputPath, verifyUrl);
+            } else {
+                await generateCertificatePDF(doc.toObject(), outputPath, verifyUrl);
+            }
+
+            const docHash = await hashFile(outputPath);
+            const txHash  = await blockchainService.issueOnChain(docHash);
+
+            doc.docHash = docHash;
+            doc.txHash  = txHash;
+            doc.status  = 'ACTIVE';
+            await doc.save();
+
+            await ShortLink.create({ shortCode, document: doc._id, docHash });
+
+            if (uploadedDraftPath && fs.existsSync(uploadedDraftPath)) fs.unlinkSync(uploadedDraftPath);
+
+            results.success.push({ id, docId: doc.docId, holderName: doc.holderName, txHash });
+        } catch (err) {
+            if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            results.errors.push({ id, reason: err.message || 'Lỗi không xác định' });
+        }
+    }
+
+    return res.status(207).json({
+        success: true,
+        message: `Batch hoàn tất: ${results.success.length} thành công, ${results.errors.length} lỗi`,
+        data: results,
+    });
+};
+
+module.exports = {
+    createDraft,
+    createDraftFromUpload,
+    importDraftsFromCsv,
+    issueDocument,
+    batchIssue,
+    getAllDocs,
+    getDocById,
+    getStudentFeed,
+    getMyDiplomas,
+    receiveDocument,
+};

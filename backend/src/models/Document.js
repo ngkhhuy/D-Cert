@@ -22,7 +22,11 @@ const DocumentSchema = new mongoose.Schema({
   txHash: { type: String }, 
   
   issuer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['DRAFT', 'ACTIVE', 'REVOKED'], default: 'DRAFT' }
+  status: { type: String, enum: ['DRAFT', 'ACTIVE', 'REVOKED'], default: 'DRAFT' },
+
+  // Ghi nhận thời điểm sinh viên nhận/tải văn bằng
+  receivedAt: { type: Date },
+  receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Document', DocumentSchema);
