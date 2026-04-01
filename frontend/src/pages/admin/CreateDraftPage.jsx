@@ -102,8 +102,9 @@ export default function CreateDraftPage() {
     const navigate = useNavigate();
     const [mode, setMode] = useState('manual');
     const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [pdfFile, setPdfFile] = useState(null);
+    const [csvFile, setCsvFile] = useState(null);
+    const [csvResult, setCsvResult] = useState(null);
     const [stats, setStats] = useState({ todayDrafts: 0, pending: 0, rejected: 0 });
 
     const [form, setForm] = useState({
@@ -157,6 +158,28 @@ export default function CreateDraftPage() {
         }).catch(() => {});
     }, []);
 
+    // Import CSV
+    const handleCsvImport = async (e) => {
+        e.preventDefault();
+        if (!csvFile) { toast.error('Vui lòng chọn file CSV'); return; }
+        setLoading(true);
+        setCsvResult(null);
+        try {
+            const fd = new FormData();
+            fd.append('csv', csvFile);
+            const res = await api.post('/docs/draft/import-csv', fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            setCsvResult(res.data?.data || null);
+            const created = res.data?.data?.created?.length || 0;
+            toast.success(`Đã import ${created} bản nháp thành công!`);
+            setStats((s) => ({ ...s, todayDrafts: s.todayDrafts + created, pending: s.pending + created }));
+            setCsvFile(null);
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Lỗi khi import CSV');
+        } finally { setLoading(false); }
+    };
+
     // Tạo bản nháp
     const handleDraft = async (e) => {
         e.preventDefault();
@@ -175,26 +198,6 @@ export default function CreateDraftPage() {
         } catch (err) {
             toast.error(err.response?.data?.message || err.message || 'Lỗi khi tạo bản nháp');
         } finally { setLoading(false); }
-    };
-
-    // Gửi lên BGH (tạo nháp rồi navigate sang docs list)
-    const handleSubmitToBGH = async () => {
-        if (mode === 'manual' && (!form.holderName || !form.holderId)) {
-            toast.error('Vui lòng điền đầy đủ Mã sinh viên và Họ tên');
-            return;
-        }
-        setSubmitting(true);
-        try {
-            if (mode === 'upload') {
-                await createUploadDraft();
-            } else {
-                await api.post('/docs/draft', buildPayload());
-            }
-            toast.success('Đã gửi bản nháp lên Ban Giám Hiệu duyệt!');
-            navigate('/admin/docs');
-        } catch (err) {
-            toast.error(err.response?.data?.message || err.message || 'Lỗi khi gửi bản nháp');
-        } finally { setSubmitting(false); }
     };
 
     return (
@@ -228,32 +231,118 @@ export default function CreateDraftPage() {
                             Khu vực Nhập liệu &amp; Tạo bằng
                         </h3>
                         {/* Tabs */}
-                        <div className="flex p-1 bg-gray-100 rounded-lg w-fit">
-                            <button
-                                type="button"
-                                onClick={() => setMode('manual')}
-                                className={`px-5 py-2 text-sm rounded-md transition-colors ${
-                                    mode === 'manual'
-                                        ? 'font-semibold bg-white text-[#003b73] shadow-sm'
-                                        : 'font-medium text-gray-500 hover:text-[#003b73]'
-                                }`}
-                            >
-                                Nhập thủ công
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setMode('upload')}
-                                className={`px-5 py-2 text-sm rounded-md transition-colors ${
-                                    mode === 'upload'
-                                        ? 'font-semibold bg-white text-[#003b73] shadow-sm'
-                                        : 'font-medium text-gray-500 hover:text-[#003b73]'
-                                }`}
-                            >
-                                Upload file PDF
-                            </button>
+                        <div className="flex p-1 bg-gray-100 rounded-lg w-fit flex-wrap gap-0.5">
+                            {[['manual', 'Nhập thủ công'], ['upload', 'Upload file PDF'], ['csv', 'Import CSV']].map(([m, label]) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => { setMode(m); setCsvResult(null); }}
+                                    className={`px-5 py-2 text-sm rounded-md transition-colors ${
+                                        mode === m
+                                            ? 'font-semibold bg-white text-[#003b73] shadow-sm'
+                                            : 'font-medium text-gray-500 hover:text-[#003b73]'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
+                    {mode === 'csv' ? (
+                        <form onSubmit={handleCsvImport} className="p-7 space-y-5">
+                            <div className="rounded-xl border border-green-100 bg-green-50/70 p-4 space-y-3">
+                                <p className="text-sm font-semibold text-[#003b73]">Import danh sách sinh viên từ file CSV</p>
+                                <p className="text-xs text-gray-500">
+                                    Cột bắt buộc: <code className="bg-white px-1 rounded">holderName</code>, <code className="bg-white px-1 rounded">holderId</code>, <code className="bg-white px-1 rounded">degreeLevel</code><br />
+                                    Cột tùy chọn: <code className="bg-white px-1 rounded">docId</code>, <code className="bg-white px-1 rounded">major</code>, <code className="bg-white px-1 rounded">classification</code>, <code className="bg-white px-1 rounded">graduationYear</code>, <code className="bg-white px-1 rounded">dob</code>
+                                </p>
+                                {/* Download sample CSV */}
+                                <a
+                                    href="data:text/csv;charset=utf-8,docId,holderName,holderId,degreeLevel,major,classification,graduationYear,dob%0A,Nguy%E1%BB%85n V%C4%83n A,102220001,ENGINEER,C%C3%B4ng ngh%E1%BB%87 Th%C3%B4ng tin,Gi%E1%BB%8Fi,2026,2004-05-10%0A,Tr%E1%BA%A7n Th%E1%BB%8B B,102220002,BACHELOR,Kinh t%E1%BA%BF %26 Qu%E1%BA%A3n l%C3%BD,Xu%E1%BA%A5t s%E1%BA%AFc,2026,2003-08-20"
+                                    download="mau-import-sv.csv"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#003b73] hover:underline"
+                                >
+                                    <span className="material-symbols-outlined text-sm">download</span>
+                                    Tải file mẫu CSV
+                                </a>
+                                <input
+                                    type="file"
+                                    accept=".csv,text/csv"
+                                    onChange={(e) => { setCsvFile(e.target.files?.[0] || null); setCsvResult(null); }}
+                                    className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-[#003b73] file:font-semibold hover:file:bg-gray-50"
+                                />
+                                {csvFile && <p className="text-xs text-gray-500">File: {csvFile.name}</p>}
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading || !csvFile}
+                                className="px-7 py-3 rounded-xl bg-[#003b73] text-white font-bold hover:bg-[#002855] active:scale-[0.98] transition-all flex items-center gap-2 text-sm disabled:opacity-60"
+                                style={{ fontFamily: 'Manrope, sans-serif' }}
+                            >
+                                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                                {loading ? 'Đang import...' : 'Import danh sách'}
+                            </button>
+
+                            {/* Import results */}
+                            {csvResult && (
+                                <div className="space-y-4">
+                                    {/* Summary */}
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                                            <p className="text-2xl font-extrabold text-green-700">{csvResult.created?.length ?? 0}</p>
+                                            <p className="text-xs text-green-600 mt-0.5">Tạo mới</p>
+                                        </div>
+                                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
+                                            <p className="text-2xl font-extrabold text-yellow-700">{csvResult.skipped?.length ?? 0}</p>
+                                            <p className="text-xs text-yellow-600 mt-0.5">Bỏ qua</p>
+                                        </div>
+                                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                                            <p className="text-2xl font-extrabold text-red-700">{csvResult.errors?.length ?? 0}</p>
+                                            <p className="text-xs text-red-600 mt-0.5">Lỗi</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Created list */}
+                                    {csvResult.created?.length > 0 && (
+                                        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                                            <div className="px-4 py-2.5 bg-green-50 border-b border-green-100">
+                                                <p className="text-xs font-bold text-green-700">ĐÃ TẠO THÀNH CÔNG ({csvResult.created.length})</p>
+                                            </div>
+                                            <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
+                                                {csvResult.created.map((r, i) => (
+                                                    <div key={i} className="flex items-center px-4 py-2 text-sm gap-3">
+                                                        <span className="material-symbols-outlined text-green-500 text-[16px]">check_circle</span>
+                                                        <span className="font-mono text-xs text-gray-500 w-36 shrink-0">{r.docId}</span>
+                                                        <span className="text-gray-700 truncate">{r.holderName}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Errors list */}
+                                    {csvResult.errors?.length > 0 && (
+                                        <div className="bg-white rounded-xl border border-red-100 overflow-hidden">
+                                            <div className="px-4 py-2.5 bg-red-50 border-b border-red-100">
+                                                <p className="text-xs font-bold text-red-700">LỖI ({csvResult.errors.length})</p>
+                                            </div>
+                                            <div className="divide-y divide-gray-50 max-h-36 overflow-y-auto">
+                                                {csvResult.errors.map((r, i) => (
+                                                    <div key={i} className="flex items-start px-4 py-2 text-xs gap-2">
+                                                        <span className="material-symbols-outlined text-red-400 text-[14px] mt-0.5">error</span>
+                                                        <span className="text-gray-500 shrink-0">Dòng {r.row}:</span>
+                                                        <span className="text-red-700">{r.reason}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </form>
+                    ) : (
                     <form id="draft-form" onSubmit={handleDraft}>
                         <div className="p-7 space-y-5">
                             {mode === 'upload' && (
@@ -364,10 +453,11 @@ export default function CreateDraftPage() {
                             </div>
                         </div>
                     </form>
+                    )}
                 </div>
 
                 {/* Preview panel */}
-                <div className="lg:col-span-5 flex flex-col">
+                <div className={`lg:col-span-5 flex flex-col ${mode === 'csv' ? 'hidden lg:flex' : ''}`}>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-base font-bold text-gray-800" style={{ fontFamily: 'Manrope, sans-serif' }}>
                             Bản xem trước phôi bằng
@@ -402,16 +492,15 @@ export default function CreateDraftPage() {
                 </div>
             </div>
 
-            {/* ── Submit to BGH ── */}
+            {/* ── Quick nav ── */}
             <div className="flex justify-center">
                 <button
-                    onClick={handleSubmitToBGH}
-                    disabled={submitting}
-                    className="w-full max-w-2xl py-5 px-10 bg-[#2e7d32] hover:bg-[#1b5e20] disabled:opacity-60 text-white rounded-2xl shadow-xl shadow-green-900/10 font-extrabold text-lg flex items-center justify-center gap-4 transition-all active:scale-[0.98]"
-                    style={{ fontFamily: 'Manrope, sans-serif' }}
+                    type="button"
+                    onClick={() => navigate('/admin/docs')}
+                    className="flex items-center gap-2 text-sm text-[#003b73] hover:underline font-semibold"
                 >
-                    <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-                    {submitting ? 'Đang gửi...' : 'Gửi bản nháp lên Ban Giám Hiệu duyệt'}
+                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    Xem danh sách văn bằng đã tạo
                 </button>
             </div>
         </div>

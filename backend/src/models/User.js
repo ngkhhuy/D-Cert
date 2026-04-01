@@ -8,9 +8,11 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   role: { 
     type: String, 
-    enum: ['SYS_ADMIN', 'OFFICER', 'SIGNER'], 
+    enum: ['SYS_ADMIN', 'OFFICER', 'SIGNER', 'STUDENT'], 
     default: 'OFFICER' 
   },
+  // Mã số sinh viên — dùng để liên kết với Document.holderId
+  studentId: { type: String, sparse: true },
   walletAddress: { 
     type: String, 
     sparse: true, 

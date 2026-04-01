@@ -90,12 +90,21 @@ function ConfirmModal({ doc, onConfirm, onCancel, loading }) {
 }
 
 // ────────── Doc Row ──────────
-function DraftRow({ doc, onIssue, onPreview, issuingId, isSelected }) {
+function DraftRow({ doc, onIssue, onPreview, issuingId, isSelected, onToggleSelect, selectable }) {
     const isLoading = issuingId === doc._id;
     return (
         <div className={`bg-white rounded-xl border shadow-sm p-5 flex items-center gap-5 hover:shadow-md transition-shadow ${
-            isSelected ? 'border-[#003b73]' : 'border-gray-100'
+            isSelected ? 'border-[#003b73] bg-blue-50/30' : 'border-gray-100'
         }`}>
+            {/* Checkbox */}
+            {selectable && (
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(doc._id)}
+                    className="w-4 h-4 accent-[#003b73] shrink-0 cursor-pointer"
+                />
+            )}
             {/* Icon */}
             <div className="p-3 bg-blue-900/8 rounded-xl shrink-0">
                 <span className="material-symbols-outlined text-[28px] text-[#003b73]">description</span>
@@ -258,6 +267,9 @@ export default function PendingApprovalPage() {
     const [selectedDocId, setSelectedDocId] = useState(null);
     const [selectedDocDetail, setSelectedDocDetail] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [batchLoading, setBatchLoading] = useState(false);
+    const [batchProgress, setBatchProgress] = useState(null); // { done, total }
 
     const fetchDocs = useCallback(() => {
         api.get('/docs')
@@ -301,6 +313,46 @@ export default function PendingApprovalPage() {
             toast.error('Không thể tải nội dung tài liệu để xem trước');
         } finally {
             setPreviewLoading(false);
+        }
+    };
+
+    const handleToggleSelect = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const handleSelectAll = () => {
+        if (selectedIds.size === pendingDocs.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(pendingDocs.map((d) => d._id)));
+        }
+    };
+
+    const handleBatchIssue = async () => {
+        const ids = [...selectedIds];
+        if (!ids.length) return;
+        setBatchLoading(true);
+        setBatchProgress({ done: 0, total: ids.length });
+        try {
+            const res = await api.post('/docs/issue/batch', { ids });
+            const { success = [], errors = [] } = res.data?.data || {};
+            toast.success(`✅ Đã ký duyệt ${success.length} văn bằng!${errors.length ? ` (${errors.length} lỗi)` : ''}`);
+            if (errors.length > 0) {
+                errors.forEach((e) => toast.error(`${e.docId || e.id}: ${e.error}`, { duration: 6000 }));
+            }
+            setSelectedIds(new Set());
+            setSelectedDocId(null);
+            setSelectedDocDetail(null);
+            fetchDocs();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Lỗi batch issue');
+        } finally {
+            setBatchLoading(false);
+            setBatchProgress(null);
         }
     };
 
@@ -386,16 +438,73 @@ export default function PendingApprovalPage() {
                             pendingDocs.length === 0 ? (
                                 <EmptyState icon="check_circle" message="Không có bản nháp nào đang chờ duyệt" color="text-green-500" />
                             ) : (
-                                pendingDocs.map((doc) => (
-                                    <DraftRow
-                                        key={doc._id}
-                                        doc={doc}
-                                        onIssue={setConfirmDoc}
-                                        onPreview={handleSelectPendingDoc}
-                                        issuingId={issuingId}
-                                        isSelected={selectedDocId === doc._id}
-                                    />
-                                ))
+                                <>
+                                    {/* Select-all bar */}
+                                    <div className="flex items-center gap-3 px-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.size === pendingDocs.length}
+                                            onChange={handleSelectAll}
+                                            className="w-4 h-4 accent-[#003b73] cursor-pointer"
+                                        />
+                                        <span className="text-xs text-gray-500">
+                                            {selectedIds.size > 0
+                                                ? `Đã chọn ${selectedIds.size} / ${pendingDocs.length}`
+                                                : `Chọn tất cả (${pendingDocs.length})`}
+                                        </span>
+                                    </div>
+                                    {pendingDocs.map((doc) => (
+                                        <DraftRow
+                                            key={doc._id}
+                                            doc={doc}
+                                            onIssue={setConfirmDoc}
+                                            onPreview={handleSelectPendingDoc}
+                                            issuingId={issuingId}
+                                            isSelected={selectedIds.has(doc._id)}
+                                            onToggleSelect={handleToggleSelect}
+                                            selectable
+                                        />
+                                    ))}
+
+                                    {/* Batch action bar */}
+                                    {selectedIds.size > 0 && (
+                                        <div className="sticky bottom-4 z-30 bg-white border border-[#003b73]/20 shadow-xl rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+                                            <div>
+                                                <p className="text-sm font-bold text-[#003b73]">{selectedIds.size} văn bằng đã chọn</p>
+                                                {batchProgress && (
+                                                    <p className="text-xs text-gray-500">Đang xử lý {batchProgress.done + 1}/{batchProgress.total}...</p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setSelectedIds(new Set())}
+                                                    disabled={batchLoading}
+                                                    className="px-4 py-2.5 text-sm border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl transition-colors"
+                                                >
+                                                    Bỏ chọn
+                                                </button>
+                                                <button
+                                                    onClick={handleBatchIssue}
+                                                    disabled={batchLoading || issuingId !== null}
+                                                    className="flex items-center gap-2 bg-[#2e7d32] hover:bg-[#1b5e20] disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-colors"
+                                                    style={{ fontFamily: 'Manrope, sans-serif' }}
+                                                >
+                                                    {batchLoading ? (
+                                                        <>
+                                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            Đang ký duyệt...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span className="material-symbols-outlined text-[18px]">verified</span>
+                                                            Ký duyệt tất cả đã chọn ({selectedIds.size})
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )
                         )}
                         {activeTab === 'issued' && (
