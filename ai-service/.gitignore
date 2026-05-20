@@ -1,0 +1,26 @@
+# Environment variables
+.env
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Vector store data (generated at runtime)
+app/storage/faiss.index
+app/storage/metadata.json
+
+# Keep storage directory
+!app/storage/.gitkeep
+
+# Uploaded/temp files
+uploads/
+
+# OS files
+.DS_Store
