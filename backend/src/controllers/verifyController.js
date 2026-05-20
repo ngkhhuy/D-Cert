@@ -2,6 +2,29 @@ const fs = require('fs');
 const Document = require('../models/Document');
 const ShortLink = require('../models/ShortLink');
 const { hashFile } = require('../utils/hashUtils');
+const blockchainService = require('../services/blockchainService');
+
+const getPublicVerifyUrl = (req, shortCode) => {
+    const baseUrl = process.env.FRONTEND_URL || process.env.PUBLIC_APP_URL || '';
+    const path = `/verify?code=${encodeURIComponent(shortCode)}`;
+    return baseUrl ? `${baseUrl.replace(/\/$/, '')}${path}` : path;
+};
+
+const findDocByShortCode = async (shortCode, { trackAccess = true } = {}) => {
+    const shortLink = await ShortLink.findOne({ shortCode }).populate({
+        path: 'document',
+        populate: { path: 'issuer', select: 'fullName email role' },
+    });
+    if (!shortLink) return { shortLink: null, doc: null };
+
+    if (trackAccess) {
+        shortLink.clicks += 1;
+        shortLink.lastAccessed = new Date();
+        await shortLink.save();
+    }
+
+    return { shortLink, doc: shortLink.document };
+};
 
 /**
  * @route   GET /v/:shortCode
@@ -12,28 +35,54 @@ const redirectShortLink = async (req, res) => {
     try {
         const { shortCode } = req.params;
 
-        const shortLink = await ShortLink.findOne({ shortCode }).populate('document');
+        const shouldRedirect = req.accepts('html') && !req.query.raw;
+        const { shortLink, doc } = await findDocByShortCode(shortCode, { trackAccess: !shouldRedirect });
         if (!shortLink) {
             return res.status(404).json({ success: false, message: 'Mã tra cứu không tồn tại hoặc đã hết hiệu lực' });
         }
 
-        // Tăng click & cập nhật thời gian truy cập cuối
-        shortLink.clicks += 1;
-        shortLink.lastAccessed = new Date();
-        await shortLink.save();
+        if (!doc) {
+            return res.status(404).json({ success: false, message: 'Văn bản liên kết không còn tồn tại' });
+        }
 
-        const doc = shortLink.document;
+        if (shouldRedirect) {
+            return res.redirect(302, getPublicVerifyUrl(req, shortCode));
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: await buildVerifyResponse(doc),
+        });
+
+    } catch (error) {
+        console.error('ShortLink Redirect Error:', error);
+        res.status(500).json({ success: false, message: 'Lỗi máy chủ nội bộ' });
+    }
+};
+
+/**
+ * @route   GET /api/verify/code/:shortCode
+ * @desc    Tra cứu văn bằng bằng mã QR/shortCode
+ * @access  Public
+ */
+const verifyByCode = async (req, res) => {
+    try {
+        const { shortCode } = req.params;
+        const { shortLink, doc } = await findDocByShortCode(shortCode);
+
+        if (!shortLink) {
+            return res.status(404).json({ success: false, message: 'Mã tra cứu không tồn tại hoặc đã hết hiệu lực' });
+        }
         if (!doc) {
             return res.status(404).json({ success: false, message: 'Văn bản liên kết không còn tồn tại' });
         }
 
         return res.status(200).json({
             success: true,
-            data: buildVerifyResponse(doc),
+            data: await buildVerifyResponse(doc),
         });
-
     } catch (error) {
-        console.error('ShortLink Redirect Error:', error);
+        console.error('Verify By Code Error:', error);
         res.status(500).json({ success: false, message: 'Lỗi máy chủ nội bộ' });
     }
 };
@@ -58,7 +107,7 @@ const verifyByHash = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            data: buildVerifyResponse(doc),
+            data: await buildVerifyResponse(doc),
         });
 
     } catch (error) {
@@ -89,14 +138,17 @@ const verifyByUpload = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'Văn bằng không hợp lệ hoặc đã bị chỉnh sửa. Không tìm thấy khớp trong hệ thống',
-                computedHash,
+                data: { computedHash },
             });
         }
 
         return res.status(200).json({
             success: true,
             message: 'Văn bằng hợp lệ. Dữ liệu toàn vẹn.',
-            data: buildVerifyResponse(doc),
+            data: {
+                ...(await buildVerifyResponse(doc)),
+                computedHash,
+            },
         });
 
     } catch (error) {
@@ -109,19 +161,34 @@ const verifyByUpload = async (req, res) => {
 };
 
 // Helper: Chọn lọc trường trả về cho client — không lộ _id nội bộ, issuer chi tiết
-const buildVerifyResponse = (doc) => ({
-    docId:       doc.docId,
-    docType:     doc.docType,
-    degreeLevel: doc.degreeLevel,
-    holderName:  doc.holderName,
-    holderId:    doc.holderId,
-    metadata:    doc.metadata,
-    docHash:     doc.docHash,
-    txHash:      doc.txHash,
-    ipfsHash:    doc.ipfsHash,
-    status:      doc.status,
-    issuedAt:    doc.updatedAt,
-    issuer:      doc.issuer,
-});
+const buildVerifyResponse = async (doc) => {
+    let onChain = null;
+    if (doc.docHash) {
+        try {
+            onChain = await blockchainService.verifyOnChain(doc.docHash);
+        } catch (error) {
+            onChain = {
+                checked: false,
+                error: error.shortMessage || error.message || 'Không thể đối chiếu blockchain',
+            };
+        }
+    }
 
-module.exports = { redirectShortLink, verifyByHash, verifyByUpload };
+    return {
+        docId:       doc.docId,
+        docType:     doc.docType,
+        degreeLevel: doc.degreeLevel,
+        holderName:  doc.holderName,
+        holderId:    doc.holderId,
+        metadata:    doc.metadata,
+        docHash:     doc.docHash,
+        txHash:      doc.txHash,
+        ipfsHash:    doc.ipfsHash,
+        status:      doc.status,
+        issuedAt:    doc.updatedAt,
+        issuer:      doc.issuer,
+        onChain,
+    };
+};
+
+module.exports = { redirectShortLink, verifyByCode, verifyByHash, verifyByUpload };

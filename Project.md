@@ -33,7 +33,7 @@
 
 ### Bảng 1: `Users` (Quản trị Phân quyền - RBAC)
 - `username`, `password` (Hashed), `email`, `fullName`.
-- `role`: Enum ['SYS_ADMIN', 'OFFICER', 'SIGNER'] (Chuyên viên tạo nháp, Ban giám hiệu duyệt/ký).
+- `role`: Enum ['SYS_ADMIN', 'OFFICER', 'SIGNER', 'STUDENT'] (Quản trị, chuyên viên tạo nháp, ban giám hiệu duyệt/ký, sinh viên).
 - `walletAddress`: String (Bắt buộc với role SIGNER để đối chiếu chữ ký Web3).
 - `status`: Enum ['ACTIVE', 'LOCKED'].
 
@@ -46,7 +46,7 @@
 - `ipfsHash`: String - Link file PDF lưu trên IPFS.
 - `txHash`: String - Mã giao dịch xác nhận trên Ethereum.
 - `issuer`: String - Tham chiếu đến User cấp phát.
-- `status`: Enum ['ACTIVE', 'REVOKED'].
+- `status`: Enum ['DRAFT', 'ACTIVE', 'REVOKED'].
 
 ### Bảng 3: `ShortLinks` (Module Rút gọn URL nội bộ)
 - `shortCode`: String (Unique) - Mã định danh 6 ký tự (VD: A7k9Xm).
@@ -63,12 +63,14 @@
 
 ### Document & Web3 Module
 - `[POST] /api/docs/draft`: (OFFICER) Tạo nháp văn bản.
-- `[POST] /api/docs/issue`: (SIGNER) Duyệt cấp phát -> Sinh PDF -> Đóng dấu QR -> Băm SHA256 -> Upload IPFS -> Ký Smart Contract -> Lưu DB.
+- `[POST] /api/docs/issue/:id`: (SIGNER) Duyệt cấp phát -> Sinh PDF -> Đóng dấu QR -> Băm SHA256 -> Upload IPFS (nếu cấu hình Pinata) -> Ký Smart Contract -> Lưu DB.
+- `[POST] /api/docs/revoke/:id`: (SIGNER) Thu hồi văn bằng -> ghi trạng thái revoke lên Smart Contract -> cập nhật DB.
 - `[GET] /api/docs/:id`: Truy xuất chi tiết văn bản & lịch sử cấp phát.
 
 ### Verification & ShortLink Module
-- `[GET] /v/:shortCode`: Khớp mã rút gọn, tăng `clicks`, redirect tới trang đối chiếu QR.
-- `[GET] /api/verify/hash/:hash`: Truy vấn RPC Node để đối chiếu Hash trên mạng Ethereum.
+- `[GET] /v/:shortCode`: Khớp mã rút gọn, redirect tới trang đối chiếu QR.
+- `[GET] /api/verify/code/:shortCode`: API tra cứu dữ liệu theo QR/shortCode.
+- `[GET] /api/verify/hash/:hash`: Đối chiếu hash trong DB và trạng thái hash trên mạng Ethereum.
 - `[POST] /api/verify/upload`: Tra cứu tính toàn vẹn bằng cách upload trực tiếp file PDF để băm lại.
 
 ### AI Integration Module (Gọi sang FastAPI)
@@ -80,27 +82,37 @@
 ## 🗓 4. LỘ TRÌNH THỰC THI CHI TIẾT (3 THÁNG)
 
 ### 🟢 GIAI ĐOẠN 1: XÂY DỰNG LÕI HỆ THỐNG (NODE.JS + MONGODB)
-- [ ] Khởi tạo thư mục chuẩn 3-Tier Architecture trên Ubuntu.
-- [ ] Cấu hình MongoDB, các biến môi trường và JWT Auth.
-- [ ] Code Model Schema (`User`, `Document`, `ShortLink`).
-- [ ] Viết Utils: Hàm sinh `shortCode`, hàm băm PDF (SHA256).
-- [ ] Hoàn thiện API Rút gọn Link và chuyển hướng (`/v/:code`).
-- [ ] Tích hợp thư viện `pdf-lib` & `qrcode` để sinh văn bản tĩnh có dấu QR.
+- [x] Khởi tạo thư mục chuẩn 3-Tier Architecture trên Ubuntu.
+- [x] Cấu hình MongoDB, các biến môi trường và JWT Auth.
+- [x] Code Model Schema (`User`, `Document`, `ShortLink`).
+- [x] Viết Utils: Hàm sinh `shortCode`, hàm băm PDF (SHA256).
+- [x] Hoàn thiện API Rút gọn Link và chuyển hướng (`/v/:code`).
+- [x] Tích hợp thư viện `pdf-lib` & `qrcode` để sinh văn bản tĩnh có dấu QR.
 - [ ] Test toàn bộ API CRUD bằng Postman.
 
 ### 🟡 GIAI ĐOẠN 2: TÍCH HỢP BLOCKCHAIN & FRONTEND (REACTJS)
-- [ ] Viết Smart Contract `DocumentRegistry.sol` (Lưu & Hủy Hash).
+- [x] Viết Smart Contract `DocumentRegistry.sol` (Lưu & Hủy Hash).
 - [ ] Deploy Contract lên Ethereum Sepolia.
-- [ ] Viết `BlockchainService` bằng `ethers.js` kết nối Smart Contract.
-- [ ] Viết `IpfsService` upload file qua Pinata.
-- [ ] Xây dựng ReactJS: Admin Dashboard (Đăng nhập, Quản lý sinh viên, Form cấp bằng).
-- [ ] Xây dựng ReactJS: Public Verifier Portal (Giao diện tra cứu 1 chạm cho nhà tuyển dụng).
+- [x] Viết `BlockchainService` bằng `ethers.js` kết nối Smart Contract.
+- [x] Viết `IpfsService` upload file qua Pinata.
+- [x] Xây dựng ReactJS: Admin Dashboard (Đăng nhập, Quản lý sinh viên, Form cấp bằng).
+- [x] Xây dựng ReactJS: Public Verifier Portal (Giao diện tra cứu 1 chạm cho nhà tuyển dụng).
 
-### 🔴 GIAI ĐOẠN 3: TRIỂN KHAI AI MICROSERVICE & TỔNG DUYỆT
-- [ ] Dựng FastAPI Server (Python).
-- [ ] Viết script sinh dữ liệu giả (Data Generation) để có ~500 mẫu văn bản tiếng Việt.
-- [ ] Cài PaddleOCR và Fine-tune PhoBERT cho bài toán NER trích xuất biểu mẫu.
-- [ ] Băm nhỏ file PDF Quy chế học vụ trường, dùng Bi-Encoder tạo vector lưu vào FAISS.
-- [ ] Tích hợp API Chatbot tra cứu lên giao diện Student Portal.
-- [ ] Fix bug toàn hệ thống, tinh chỉnh UX/UI.
-- [ ] Hoàn thiện Slide, Báo cáo quyển Đồ án Tốt nghiệp và chạy Demo thử nghiệm nghiệm thu.
+### 🔴 GIAI ĐOẠN 3: AI KNOWLEDGE ASSISTANT
+
+- [ ] Dựng FastAPI AI Service.
+- [ ] Tạo model KnowledgeDocument trong backend.
+- [ ] Làm chức năng upload văn bản học vụ/quyết định/thông báo.
+- [ ] Làm trạng thái DRAFT / PUBLISHED / ARCHIVED.
+- [ ] Khi PUBLISHED thì gọi AI Service để index tài liệu.
+- [ ] AI Service đọc PDF, tách text.
+- [ ] Chunk text kèm metadata.
+- [ ] Tạo embedding bằng Sentence Transformers.
+- [ ] Lưu vector vào FAISS.
+- [ ] Làm API /chat.
+- [ ] Retrieve top-k đoạn liên quan.
+- [ ] Đưa context vào LLM để trả lời.
+- [ ] Trả về answer + sources.
+- [ ] Tích hợp chatbot vào Student Portal.
+- [ ] Lưu lịch sử hỏi đáp.
+- [ ] Có fallback khi không tìm thấy thông tin.

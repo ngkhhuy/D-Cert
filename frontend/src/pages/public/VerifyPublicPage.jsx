@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -17,6 +17,7 @@ function fmtDate(d) {
 function ResultCard({ result }) {
     const isValid = result?.success && result?.data?.status === 'ACTIVE';
     const d = result?.data;
+    const onChainValid = d?.onChain?.isValid === true;
 
     if (!isValid) {
         return (
@@ -57,6 +58,7 @@ function ResultCard({ result }) {
                                 d.metadata?.classification ? ['Xếp loại', d.metadata.classification] : null,
                                 ['Đơn vị cấp', 'Trường Đại học Bách Khoa – ĐHĐN'],
                                 d.issuedAt             ? ['Ngày cấp', fmtDate(d.issuedAt)] : null,
+                                d.onChain?.issuer      ? ['Ví ký', d.onChain.issuer] : null,
                             ].filter(Boolean).map(([label, value]) => (
                                 <p key={label} className="text-[#2d8a57] font-medium flex items-center gap-2 flex-wrap">
                                     <span className="text-sm uppercase tracking-wider opacity-70">{label}:</span>
@@ -79,6 +81,25 @@ function ResultCard({ result }) {
                             </span>
                         </div>
                     )}
+                    {d.ipfsHash && (
+                        <div className="pt-2 border-t border-[#a6d8bc]/50">
+                            <a href={`https://gateway.pinata.cloud/ipfs/${d.ipfsHash}`}
+                                target="_blank" rel="noreferrer"
+                                className="flex items-center gap-1.5 text-[#1d5fa9] font-semibold text-sm hover:underline decoration-2 underline-offset-4">
+                                <span className="material-symbols-outlined text-sm">cloud_done</span>
+                                Xem bản lưu IPFS
+                            </a>
+                        </div>
+                    )}
+                    {d.onChain && (
+                        <div className={`text-xs font-bold rounded-lg px-3 py-2 ${
+                            onChainValid ? 'bg-white/70 text-[#1b5e3a]' : 'bg-yellow-50 text-yellow-700'
+                        }`}>
+                            {onChainValid
+                                ? 'Blockchain xác nhận hash đang hợp lệ.'
+                                : d.onChain.error || 'Blockchain chưa xác nhận trạng thái hợp lệ.'}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -91,6 +112,20 @@ export default function VerifyPublicPage() {
     const [result, setResult] = useState(null);
     const [dragging, setDragging] = useState(false);
     const inputRef = useRef();
+
+    useEffect(() => {
+        const code = new URLSearchParams(window.location.search).get('code');
+        if (!code) return;
+
+        setLoading(true);
+        pub.get(`/api/verify/code/${encodeURIComponent(code)}`)
+            .then((res) => setResult(res.data))
+            .catch((err) => setResult({
+                success: false,
+                message: err.response?.data?.message || 'Mã QR không hợp lệ hoặc đã hết hiệu lực',
+            }))
+            .finally(() => setLoading(false));
+    }, []);
 
     const handleFile = (f) => {
         if (!f || f.type !== 'application/pdf') { toast.error('Chỉ chấp nhận file PDF'); return; }
@@ -158,6 +193,9 @@ export default function VerifyPublicPage() {
                                     <h1 className="text-4xl font-extrabold tracking-tight text-[#003b73]"
                                         style={{ fontFamily: 'Manrope, sans-serif' }}>Xác thực văn bằng</h1>
                                     <p className="text-gray-500">Tải lên tệp tin PDF chứng chỉ của bạn để kiểm tra tính hợp lệ trên Blockchain.</p>
+                                    {new URLSearchParams(window.location.search).get('code') && (
+                                        <p className="text-xs font-semibold text-[#003b73]">Đang tra cứu theo mã QR được nhúng trong văn bằng.</p>
+                                    )}
                                 </div>
 
                                 {/* Drop zone */}

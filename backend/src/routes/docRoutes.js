@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, getAllDocs, getDocById } = require('../controllers/docController');
+const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, revokeDocument, getAllDocs, getDocById } = require('../controllers/docController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const draftUploadDir = path.join(__dirname, '../../public/uploads/drafts');
@@ -68,5 +68,6 @@ router.post(
 // Chỉ SIGNER (Hiệu trưởng/Ký duyệt) và SYS_ADMIN mới được phát hành
 router.post('/issue/batch', protect, authorize('SIGNER', 'SYS_ADMIN'), batchIssue);
 router.post('/issue/:id', protect, authorize('SIGNER', 'SYS_ADMIN'), issueDocument);
+router.post('/revoke/:id', protect, authorize('SIGNER', 'SYS_ADMIN'), revokeDocument);
 
 module.exports = router;

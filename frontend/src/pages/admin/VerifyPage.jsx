@@ -3,6 +3,11 @@ import { ShieldCheck, Upload, Hash, CheckCircle, XCircle, ExternalLink } from 'l
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
+const VERIFY_TABS = [
+    { key: 'hash', label: 'Theo Hash', icon: <Hash size={15} /> },
+    { key: 'upload', label: 'Upload PDF', icon: <Upload size={15} /> },
+];
+
 export default function VerifyPage() {
     const [tab, setTab] = useState('hash'); // 'hash' | 'upload'
     const [hash, setHash] = useState('');
@@ -48,12 +53,12 @@ export default function VerifyPage() {
 
             {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
-                {[['hash', 'Theo Hash', Hash], ['upload', 'Upload PDF', Upload]].map(([key, label, Icon]) => (
+                {VERIFY_TABS.map(({ key, label, icon }) => (
                     <button key={key} onClick={() => { setTab(key); reset(); }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                             tab === key ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'
                         }`}>
-                        <Icon size={15} />{label}
+                        {icon}{label}
                     </button>
                 ))}
             </div>
@@ -115,6 +120,24 @@ function VerifyResult({ result }) {
                                 className="text-blue-600 hover:underline flex items-center gap-1 font-mono text-xs">
                                 {result.data.txHash.slice(0, 20)}... <ExternalLink size={11} />
                             </a>
+                        </p>
+                    )}
+                    {result.data.ipfsHash && (
+                        <p className="flex items-center gap-1">
+                            <span className="font-medium">IPFS:</span>
+                            <a href={`https://gateway.pinata.cloud/ipfs/${result.data.ipfsHash}`}
+                                target="_blank" rel="noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-1 font-mono text-xs">
+                                {result.data.ipfsHash.slice(0, 18)}... <ExternalLink size={11} />
+                            </a>
+                        </p>
+                    )}
+                    {result.data.onChain && (
+                        <p>
+                            <span className="font-medium">Blockchain:</span>{' '}
+                            {result.data.onChain.isValid === true
+                                ? 'Hash hợp lệ trên Sepolia'
+                                : result.data.onChain.error || 'Không hợp lệ / đã thu hồi'}
                         </p>
                     )}
                 </div>

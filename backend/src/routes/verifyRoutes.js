@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { verifyByHash, verifyByUpload } = require('../controllers/verifyController');
+const { verifyByCode, verifyByHash, verifyByUpload } = require('../controllers/verifyController');
 
 // Cấu hình multer: lưu file tạm vào /tmp, chỉ chấp nhận PDF, giới hạn 10MB
 const upload = multer({
@@ -34,6 +34,7 @@ const handleMulterError = (err, req, res, next) => {
     next(err);
 };
 
+router.get('/code/:shortCode', verifyByCode);
 router.get('/hash/:hash', verifyByHash);
 router.post('/upload', uploadVerifyPdf, handleMulterError, verifyByUpload);
 

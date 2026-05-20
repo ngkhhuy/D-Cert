@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 
@@ -5,11 +6,11 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('token')));
 
     useEffect(() => {
         const token = localStorage.getItem('token');
-        if (!token) { setLoading(false); return; }
+        if (!token) return;
 
         api.get('/users/me')
             .then((res) => {
