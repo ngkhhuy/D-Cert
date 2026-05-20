@@ -45,4 +45,26 @@ const ingestKnowledgeDocument = async (doc) => {
     }
 };
 
-module.exports = { ingestKnowledgeDocument };
+const archiveKnowledgeDocument = async (documentId) => {
+    const body = { document_id: documentId.toString() };
+
+    try {
+        const response = await axios.post(`${getAiServiceUrl()}/knowledge/archive`, body, {
+            timeout: 60_000,
+            headers: { 'Content-Type': 'application/json' },
+        });
+        return response.data;
+    } catch (error) {
+        if (error.code === 'ECONNABORTED') {
+            throw new Error('AI Service timeout sau 60 giây');
+        }
+        const message = error.response?.data?.detail
+            || error.response?.data?.message
+            || error.response?.data?.error
+            || error.message
+            || 'AI Service archive thất bại';
+        throw new Error(message);
+    }
+};
+
+module.exports = { ingestKnowledgeDocument, archiveKnowledgeDocument };

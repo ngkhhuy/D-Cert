@@ -162,3 +162,77 @@ def remove_document(document_id: str) -> dict:
     save_metadata(remaining_metadata)
 
     return {"removed": removed, "remaining": len(remaining_metadata)}
+
+
+def archive_document_metadata(document_id: str) -> dict:
+    """Mark all chunks belonging to document_id as ARCHIVED in metadata.json.
+
+    The FAISS index is left unchanged.  answer_question already filters out
+    chunks whose status != 'PUBLISHED', so archived chunks are silently
+    skipped without requiring an index rebuild.
+    """
+    from datetime import datetime
+
+    metadata = load_metadata()
+    archived_count = 0
+    archived_at = datetime.utcnow().isoformat()
+
+    for item in metadata:
+        if item.get("document_id") == document_id:
+            item["status"] = "ARCHIVED"
+            item["archived_at"] = archived_at
+            archived_count += 1
+
+    if archived_count > 0:
+        save_metadata(metadata)
+
+    return {
+        "document_id": document_id,
+        "archived": archived_count,
+        "total": len(metadata),
+    }
+
+
+def rebuild_index_from_published_metadata() -> dict:
+    """Rebuild the FAISS index using only PUBLISHED chunks.
+
+    NOTE (demo version): This overwrites metadata.json to contain only
+    PUBLISHED chunks, discarding ARCHIVED entries from the AI index.
+    A production system should use a vector database with native
+    delete/update support instead.
+    """
+    metadata = load_metadata()
+    published_items = [
+        item for item in metadata
+        if item.get("status") == "PUBLISHED" and str(item.get("content", "")).strip()
+    ]
+
+    if not published_items:
+        if INDEX_PATH.exists():
+            INDEX_PATH.unlink()
+        save_metadata([])
+        return {
+            "rebuilt": True,
+            "vectors": 0,
+            "message": "Không còn chunk PUBLISHED nào. Đã reset index.",
+        }
+
+    from app.services.embedder import embed_texts
+
+    texts = [item["content"] for item in published_items]
+    embeddings = embed_texts(texts)
+
+    if embeddings.ndim != 2 or embeddings.shape[0] == 0:
+        raise ValueError("Không thể tạo embeddings từ các chunk PUBLISHED")
+
+    vectors = np.asarray(embeddings, dtype=np.float32)
+    index = faiss.IndexFlatIP(int(vectors.shape[1]))
+    index.add(vectors)
+
+    save_index(index)
+    save_metadata(published_items)
+
+    return {
+        "rebuilt": True,
+        "vectors": len(published_items),
+    }

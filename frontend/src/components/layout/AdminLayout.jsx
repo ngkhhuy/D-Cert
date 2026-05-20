@@ -6,12 +6,14 @@ const OFFICER_NAV = [
     { to: '/admin/docs/new',  label: 'Create Draft',      icon: 'edit_document' },
     { to: '/admin/docs',      label: 'History',            icon: 'history' },
     { to: '/admin/verify',    label: 'Xác thực',           icon: 'verified_user' },
+    { to: '/admin/knowledge', label: 'Kho văn bản AI',     icon: 'library_books' },
 ];
 
 const ADMIN_NAV = [
     { to: '/admin/pending',   label: 'Pending Approval',   icon: 'pending_actions' },
     { to: '/admin/docs',      label: 'All Documents',      icon: 'folder_open' },
     { to: '/admin/verify',    label: 'Xác thực',           icon: 'verified_user' },
+    { to: '/admin/knowledge', label: 'Kho văn bản AI',     icon: 'library_books' },
 ];
 
 const ROLE_LABEL = {
