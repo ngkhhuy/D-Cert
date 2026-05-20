@@ -11,16 +11,16 @@ export default function LoginPage() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (user) navigate('/admin', { replace: true });
+        if (user) navigate(user.role === 'STUDENT' ? '/student' : '/admin', { replace: true });
     }, [user, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await login(form.username, form.password);
+            const profile = await login(form.username, form.password);
             toast.success('Đăng nhập thành công!');
-            navigate('/admin', { replace: true });
+            navigate(profile.role === 'STUDENT' ? '/student' : '/admin', { replace: true });
         } catch (err) {
             toast.error(err.response?.data?.message || 'Sai tên đăng nhập hoặc mật khẩu');
         } finally {

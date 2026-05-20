@@ -342,7 +342,7 @@ export default function PendingApprovalPage() {
             const { success = [], errors = [] } = res.data?.data || {};
             toast.success(`✅ Đã ký duyệt ${success.length} văn bằng!${errors.length ? ` (${errors.length} lỗi)` : ''}`);
             if (errors.length > 0) {
-                errors.forEach((e) => toast.error(`${e.docId || e.id}: ${e.error}`, { duration: 6000 }));
+                errors.forEach((e) => toast.error(`${e.docId || e.id}: ${e.reason || 'Lỗi không xác định'}`, { duration: 6000 }));
             }
             setSelectedIds(new Set());
             setSelectedDocId(null);

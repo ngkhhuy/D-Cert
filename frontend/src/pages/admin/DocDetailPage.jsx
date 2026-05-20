@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Zap, ExternalLink, FileDown } from 'lucide-react';
+import { ArrowLeft, Zap, ExternalLink, FileDown, Ban, ShieldCheck } from 'lucide-react';
 
 const STATUS_BADGE = {
     ACTIVE:  'bg-green-100 text-green-700',
@@ -18,6 +18,7 @@ export default function DocDetailPage() {
     const [doc, setDoc] = useState(null);
     const [loading, setLoading] = useState(true);
     const [issuing, setIssuing] = useState(false);
+    const [revoking, setRevoking] = useState(false);
 
     useEffect(() => {
         api.get(`/docs/${id}`)
@@ -40,6 +41,31 @@ export default function DocDetailPage() {
         }
     };
 
+    const handleRevoke = async () => {
+        if (!confirm('Xác nhận thu hồi văn bằng? Trạng thái on-chain sẽ chuyển sang không hợp lệ.')) return;
+        setRevoking(true);
+        try {
+            const res = await api.post(`/docs/revoke/${id}`);
+            setDoc((prev) => ({
+                ...prev,
+                status: 'REVOKED',
+                metadata: {
+                    ...(prev.metadata || {}),
+                    revocation: {
+                        ...(prev.metadata?.revocation || {}),
+                        txHash: res.data?.data?.revokeTxHash,
+                        revokedAt: new Date().toISOString(),
+                    },
+                },
+            }));
+            toast.success('Đã thu hồi văn bằng trên blockchain!');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Lỗi khi thu hồi');
+        } finally {
+            setRevoking(false);
+        }
+    };
+
     if (loading) return (
         <div className="flex justify-center py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
@@ -51,6 +77,7 @@ export default function DocDetailPage() {
     );
 
     const canIssue = doc.status === 'DRAFT' && ['SIGNER', 'SYS_ADMIN'].includes(user?.role);
+    const canRevoke = doc.status === 'ACTIVE' && ['SIGNER', 'SYS_ADMIN'].includes(user?.role);
 
     return (
         <div className="p-8 max-w-3xl">
@@ -66,13 +93,22 @@ export default function DocDetailPage() {
                         {doc.status}
                     </span>
                 </div>
-                {canIssue && (
-                    <button onClick={handleIssue} disabled={issuing}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
-                        <Zap size={16} />
-                        {issuing ? 'Đang phát hành...' : 'Phát hành & Ký'}
-                    </button>
-                )}
+                <div className="flex gap-2">
+                    {canIssue && (
+                        <button onClick={handleIssue} disabled={issuing}
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
+                            <Zap size={16} />
+                            {issuing ? 'Đang phát hành...' : 'Phát hành & Ký'}
+                        </button>
+                    )}
+                    {canRevoke && (
+                        <button onClick={handleRevoke} disabled={revoking}
+                            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
+                            <Ban size={16} />
+                            {revoking ? 'Đang thu hồi...' : 'Thu hồi'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Info card */}
@@ -93,6 +129,22 @@ export default function DocDetailPage() {
                             className="flex items-center gap-1 text-blue-600 hover:underline font-mono text-xs break-all">
                             {doc.txHash} <ExternalLink size={12} />
                         </a>
+                    } />
+                )}
+                {doc.ipfsHash && (
+                    <InfoRow label="IPFS CID" value={
+                        <a href={`https://gateway.pinata.cloud/ipfs/${doc.ipfsHash}`} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-1 text-blue-600 hover:underline font-mono text-xs break-all">
+                            {doc.ipfsHash} <ExternalLink size={12} />
+                        </a>
+                    } />
+                )}
+                {doc.docHash && (
+                    <InfoRow label="Đối chiếu" value={
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full">
+                            <ShieldCheck size={13} />
+                            Có thể xác thực bằng SHA-256 / QR / upload PDF
+                        </span>
                     } />
                 )}
                 {doc.metadata && Object.keys(doc.metadata).length > 0 && (

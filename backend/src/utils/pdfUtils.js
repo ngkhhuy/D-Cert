@@ -40,9 +40,13 @@ const generateCertificatePDF = async (docData, outputPath, verifyUrl) => {
         throw new Error(`Loại bằng "${docData.degreeLevel}" chưa có phôi tương ứng trong TEMPLATE_MAP`);
     }
 
-    const templatePath = path.join(__dirname, `../templates/${templateFileName}`);
+    let templatePath = path.join(__dirname, `../templates/${templateFileName}`);
     if (!fs.existsSync(templatePath)) {
-        throw new Error(`Thiếu file phôi: ${templateFileName}. Vui lòng đặt file vào src/templates/`);
+        const fallbackPath = path.join(__dirname, '../templates/phoibang_cunhan.pdf');
+        if (!fs.existsSync(fallbackPath)) {
+            throw new Error(`Thiếu file phôi: ${templateFileName}. Vui lòng đặt file vào src/templates/`);
+        }
+        templatePath = fallbackPath;
     }
 
     // 2. Load phôi PDF
@@ -83,8 +87,9 @@ const generateCertificatePDF = async (docData, outputPath, verifyUrl) => {
     if (docData.metadata?.major)
         drawCentered(docData.metadata.major, FIELD_CONFIG.major);
 
-    if (docData.metadata?.degreeClassification)
-        drawCentered(docData.metadata.degreeClassification, FIELD_CONFIG.degreeClassification);
+    const classification = docData.metadata?.degreeClassification || docData.metadata?.classification;
+    if (classification)
+        drawCentered(classification, FIELD_CONFIG.degreeClassification);
 
     if (docData.metadata?.graduationYear)
         drawCentered(String(docData.metadata.graduationYear), FIELD_CONFIG.graduationYear);

@@ -9,6 +9,7 @@ const { generateCertificatePDF } = require('../utils/pdfUtils');
 const { hashFile } = require('../utils/hashUtils');
 const { generateShortCode } = require('../utils/stringUtils');
 const blockchainService = require('../services/blockchainService');
+const ipfsService = require('../services/ipfsService');
 
 /**
  * @route   POST /api/docs/draft
@@ -46,6 +47,16 @@ const stampPdfWithQr = async (inputPath, outputPath, qrText) => {
 
     const outputBytes = await pdfDoc.save();
     fs.writeFileSync(outputPath, outputBytes);
+};
+
+const uploadIssuedPdfToIpfs = async (outputPath, docId) => {
+    try {
+        return await ipfsService.uploadFile(outputPath, `${docId}.pdf`);
+    } catch (error) {
+        if (process.env.IPFS_REQUIRED === 'true') throw error;
+        console.warn(`IPFS upload skipped for ${docId}: ${error.message}`);
+        return null;
+    }
 };
 
 const createDraft = async (req, res) => {
@@ -251,16 +262,20 @@ const issueDocument = async (req, res) => {
         // Bước 4: Băm SHA256 file PDF vừa sinh
         const docHash = await hashFile(outputPath);
 
-        // Bước 5: Ghi hash lên Sepolia Blockchain
+        // Bước 5: Upload PDF lên IPFS nếu đã cấu hình Pinata
+        const ipfsHash = await uploadIssuedPdfToIpfs(outputPath, doc.docId);
+
+        // Bước 6: Ghi hash lên Sepolia Blockchain
         const txHash = await blockchainService.issueOnChain(docHash);
 
-        // Bước 6: Cập nhật Document trong DB
+        // Bước 7: Cập nhật Document trong DB
         doc.docHash  = docHash;
+        doc.ipfsHash = ipfsHash || doc.ipfsHash;
         doc.txHash   = txHash;
         doc.status   = 'ACTIVE';
         await doc.save();
 
-        // Bước 7: Tạo bản ghi ShortLink
+        // Bước 8: Tạo bản ghi ShortLink
         await ShortLink.create({
             shortCode,
             document: doc._id,
@@ -278,6 +293,7 @@ const issueDocument = async (req, res) => {
             data: {
                 docId:     doc.docId,
                 docHash,
+                ipfsHash,
                 txHash,
                 verifyUrl,
                 pdfPath:   `/uploads/${doc.docId}.pdf`,
@@ -556,9 +572,11 @@ const batchIssue = async (req, res) => {
             }
 
             const docHash = await hashFile(outputPath);
+            const ipfsHash = await uploadIssuedPdfToIpfs(outputPath, doc.docId);
             const txHash  = await blockchainService.issueOnChain(docHash);
 
             doc.docHash = docHash;
+            doc.ipfsHash = ipfsHash || doc.ipfsHash;
             doc.txHash  = txHash;
             doc.status  = 'ACTIVE';
             await doc.save();
@@ -581,12 +599,59 @@ const batchIssue = async (req, res) => {
     });
 };
 
+/**
+ * @route   POST /api/docs/revoke/:id
+ * @desc    Thu hồi văn bằng đã phát hành trên blockchain và cập nhật DB
+ * @access  Private (SIGNER, SYS_ADMIN)
+ */
+const revokeDocument = async (req, res) => {
+    try {
+        const doc = await Document.findById(req.params.id);
+        if (!doc) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy văn bản' });
+        }
+        if (doc.status !== 'ACTIVE') {
+            return res.status(400).json({ success: false, message: `Chỉ văn bản ACTIVE mới có thể thu hồi. Trạng thái hiện tại: ${doc.status}` });
+        }
+        if (!doc.docHash) {
+            return res.status(400).json({ success: false, message: 'Văn bản chưa có docHash để thu hồi trên blockchain' });
+        }
+
+        const revokeTxHash = await blockchainService.revokeOnChain(doc.docHash);
+        doc.status = 'REVOKED';
+        doc.metadata = {
+            ...(doc.metadata || {}),
+            revocation: {
+                revokedAt: new Date(),
+                revokedBy: req.user._id,
+                txHash: revokeTxHash,
+                reason: req.body?.reason || '',
+            },
+        };
+        await doc.save();
+
+        return res.json({
+            success: true,
+            message: 'Thu hồi văn bằng thành công',
+            data: {
+                docId: doc.docId,
+                status: doc.status,
+                revokeTxHash,
+            },
+        });
+    } catch (error) {
+        console.error('Revoke Document Error:', error);
+        return res.status(500).json({ success: false, message: error.message || 'Lỗi máy chủ nội bộ khi thu hồi văn bằng' });
+    }
+};
+
 module.exports = {
     createDraft,
     createDraftFromUpload,
     importDraftsFromCsv,
     issueDocument,
     batchIssue,
+    revokeDocument,
     getAllDocs,
     getDocById,
     getStudentFeed,
