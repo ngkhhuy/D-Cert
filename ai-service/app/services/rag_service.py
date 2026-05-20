@@ -11,7 +11,9 @@ from app.services.vector_store import add_vectors, remove_document, search_vecto
 
 SUPPORTED_EXTENSIONS = {".pdf"}
 RETRIEVAL_THRESHOLD = 0.35
-TOP_K = 5
+TOP_K = 8
+FINAL_CONTEXTS = 5
+RECENCY_SCORE_DELTA = 0.05
 MAX_EXCERPT_LENGTH = 350
 MAX_CONTEXT_PREVIEW_LENGTH = 900
 
@@ -152,12 +154,54 @@ def _safe_excerpt(text: str, max_len: int = MAX_EXCERPT_LENGTH) -> str:
 
 
 def _sort_results(results: list[dict]) -> list[dict]:
-    """Sort primarily by relevance, then by newer issued date."""
-    def sort_key(item: dict):
-        issued_date = _parse_date(item.get("issued_date")) or date.min
-        return (float(item.get("score", 0) or 0), issued_date)
+    """Sort by relevance, then by recency within close-score groups.
 
-    return sorted(results, key=sort_key, reverse=True)
+    Items whose scores differ by at most RECENCY_SCORE_DELTA from the
+    group's top score are treated as equally relevant; within each group
+    the most recently issued document comes first.  Items with clearly
+    lower scores are never promoted above higher-scoring ones.
+    """
+    if not results:
+        return []
+
+    # Step A: sort all items by score descending
+    sorted_by_score = sorted(
+        results,
+        key=lambda item: float(item.get("score", 0) or 0),
+        reverse=True,
+    )
+
+    # Step B: group consecutive items within RECENCY_SCORE_DELTA of each
+    # group's top score, then sort each group by issued_date descending
+    grouped: list[list[dict]] = []
+    current_group: list[dict] = []
+
+    for item in sorted_by_score:
+        if not current_group:
+            current_group.append(item)
+        else:
+            group_top_score = float(current_group[0].get("score", 0) or 0)
+            item_score = float(item.get("score", 0) or 0)
+            if group_top_score - item_score <= RECENCY_SCORE_DELTA:
+                current_group.append(item)
+            else:
+                grouped.append(current_group)
+                current_group = [item]
+
+    if current_group:
+        grouped.append(current_group)
+
+    # Flatten with recency sort within each group
+    final: list[dict] = []
+    for group in grouped:
+        sorted_group = sorted(
+            group,
+            key=lambda item: _parse_date(item.get("issued_date")) or date.min,
+            reverse=True,
+        )
+        final.extend(sorted_group)
+
+    return final
 
 
 def _build_sources(results: list[dict]) -> list[dict]:
@@ -243,12 +287,13 @@ def answer_question(question: str, student_id: str | None = None) -> dict:
         }
 
     sorted_results = _sort_results(filtered)
-    sources = _build_sources(sorted_results)
+    final_results = sorted_results[:FINAL_CONTEXTS]
+    sources = _build_sources(final_results)
 
     try:
         from app.services.llm_service import generate_answer_with_ollama
 
-        llm_answer = generate_answer_with_ollama(question, sorted_results)
+        llm_answer = generate_answer_with_ollama(question, final_results)
         return {
             "answer": llm_answer,
             "sources": sources,
@@ -256,7 +301,7 @@ def answer_question(question: str, student_id: str | None = None) -> dict:
             "used_llm": True,
         }
     except Exception as exc:
-        retrieval_answer = _build_retrieval_only_answer(sorted_results)
+        retrieval_answer = _build_retrieval_only_answer(final_results)
         return {
             "answer": retrieval_answer,
             "sources": sources,

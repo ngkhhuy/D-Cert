@@ -225,10 +225,23 @@ const archiveKnowledgeDocument = async (req, res) => {
         doc.archivedAt = new Date();
         await doc.save();
 
+        try {
+            await aiService.archiveKnowledgeDocument(doc._id);
+        } catch (aiError) {
+            doc.indexError = aiError.message;
+            await doc.save();
+            const populated = await populateKnowledgeDocument(KnowledgeDocument.findById(doc._id));
+            return res.json({
+                success: true,
+                message: 'Đã lưu trữ văn bản trong hệ thống, nhưng cập nhật AI index thất bại. Có thể cần rebuild index.',
+                data: populated,
+            });
+        }
+
         const populated = await populateKnowledgeDocument(KnowledgeDocument.findById(doc._id));
         return res.json({
             success: true,
-            message: 'Đã lưu trữ văn bản. Chatbot sẽ không ưu tiên sử dụng văn bản này sau khi rebuild index.',
+            message: 'Đã lưu trữ văn bản và cập nhật trạng thái trong AI index.',
             data: populated,
         });
     } catch (error) {

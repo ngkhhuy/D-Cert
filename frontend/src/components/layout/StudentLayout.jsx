@@ -6,13 +6,15 @@ const NAV_LINKS = [
     { to: '/student',           label: 'Trang chủ',            exact: true },
     { to: '/student/diplomas',  label: 'Văn bằng của tôi',     exact: false },
     { to: '/student/requests',  label: 'Yêu cầu cấp giấy tờ', exact: false },
+    { to: '/student/assistant', label: 'Trợ lý học vụ',        exact: false },
 ];
 
 const MOBILE_NAV = [
-    { to: '/student',          label: 'Trang chủ',   icon: 'home',          fill: true },
-    { to: '/student/diplomas', label: 'Văn bằng',    icon: 'verified',      fill: false },
-    { to: '/student/requests', label: 'Yêu cầu',     icon: 'request_quote', fill: false },
-    { to: '/student/profile',  label: 'Cá nhân',     icon: 'person',        fill: false },
+    { to: '/student',           label: 'Trang chủ',  icon: 'home',          fill: true },
+    { to: '/student/diplomas',  label: 'Văn bằng',   icon: 'verified',      fill: false },
+    { to: '/student/requests',  label: 'Yêu cầu',    icon: 'request_quote', fill: false },
+    { to: '/student/assistant', label: 'Trợ lý',     icon: 'smart_toy',     fill: false },
+    { to: '/student/profile',   label: 'Cá nhân',    icon: 'person',        fill: false },
 ];
 
 export default function StudentLayout() {

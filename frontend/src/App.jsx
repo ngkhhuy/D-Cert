@@ -12,10 +12,12 @@ import CreateDraftPage     from './pages/admin/CreateDraftPage';
 import DocDetailPage       from './pages/admin/DocDetailPage';
 import VerifyPage          from './pages/admin/VerifyPage';
 import PendingApprovalPage from './pages/admin/PendingApprovalPage';
+import KnowledgePage       from './pages/admin/KnowledgePage';
 
 import StudentHomePage     from './pages/student/StudentHomePage';
 import StudentDiplomasPage from './pages/student/StudentDiplomasPage';
 import StudentRequestsPage from './pages/student/StudentRequestsPage';
+import ChatbotPage         from './pages/student/ChatbotPage';
 import VerifyPublicPage    from './pages/public/VerifyPublicPage';
 
 export default function App() {
@@ -54,6 +56,7 @@ export default function App() {
                         <Route path="docs" element={<DocsListPage />} />
                         <Route path="docs/:id" element={<DocDetailPage />} />
                         <Route path="verify" element={<VerifyPage />} />
+                        <Route path="knowledge" element={<KnowledgePage />} />
                     </Route>
 
                     {/* Student portal */}
@@ -65,6 +68,7 @@ export default function App() {
                         <Route index element={<StudentHomePage />} />
                         <Route path="diplomas" element={<StudentDiplomasPage />} />
                         <Route path="requests" element={<StudentRequestsPage />} />
+                        <Route path="assistant" element={<ChatbotPage />} />
                     </Route>
 
                     {/* Redirect gốc */}
