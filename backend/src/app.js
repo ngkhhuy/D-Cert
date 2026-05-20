@@ -19,6 +19,7 @@ app.use(helmet());
 app.use(morgan('dev'));
 
 // Serve file PDF văn bằng đã cấp phát — truy cập qua /uploads/<docId>.pdf
+app.use('/uploads/knowledge', express.static(path.join(__dirname, '../uploads/knowledge')));
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 app.get('/', (req, res) => {
@@ -32,6 +33,7 @@ const authRoutes    = require('./routes/authRoutes');
 const docRoutes     = require('./routes/docRoutes');
 const verifyRoutes  = require('./routes/verifyRoutes');
 const studentRoutes = require('./routes/studentRoutes');
+const knowledgeRoutes = require('./routes/knowledgeRoutes');
 const { protect }   = require('./middlewares/authMiddleware');
 
 // Public shortlink redirect — đặt ngoài /api để URL ngắn gọn: /v/:code
@@ -47,6 +49,7 @@ app.use('/api/auth',    authRoutes);
 app.use('/api/docs',    docRoutes);
 app.use('/api/verify',  verifyRoutes);
 app.use('/api/student', studentRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
 
 const PORT = process.env.PORT || 3000;
 
