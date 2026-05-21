@@ -1,19 +1,45 @@
 import os
+from typing import Any
 
 import requests
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
-MAX_CONTEXTS = 5
-MAX_CONTEXT_CONTENT_LENGTH = 1200
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dcert-qwen14b-vi")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+
+# Giữ nguyên theo yêu cầu: 5 nguồn, mỗi nguồn tối đa 1200 ký tự.
+MAX_CONTEXTS = int(os.getenv("MAX_CONTEXTS", "5"))
+MAX_CONTEXT_CONTENT_LENGTH = int(os.getenv("MAX_CONTEXT_CONTENT_LENGTH", "1200"))
 
 
-def _value_or_unknown(value) -> str:
+SYSTEM_PROMPT = """Bạn là trợ lý học vụ tiếng Việt của hệ thống D-CERT.
+
+QUY TẮC BẮT BUỘC:
+- Luôn trả lời 100% bằng tiếng Việt có dấu.
+- Không dùng tiếng Trung, tiếng Anh hoặc bất kỳ ngôn ngữ nào khác.
+- Không chèn ký tự Hán, pinyin hoặc đoạn văn nước ngoài.
+- Chỉ trả lời dựa trên NGỮ CẢNH được cung cấp.
+- Không tự bịa quy định, ngày tháng, địa điểm, số liệu hoặc điều kiện.
+- Không mở rộng sang quy định chung của trường khác, sở giáo dục hoặc đơn vị khác nếu ngữ cảnh không đề cập.
+- Khi trả lời, ưu tiên dùng đúng tên văn bản, đơn vị ban hành, thời gian và thông tin trong nguồn.
+- Không đưa ra quyết định học vụ cá nhân thay nhà trường.
+- Nếu câu hỏi yêu cầu kết luận cá nhân như "em có đủ điều kiện không", hãy giải thích điều kiện chung và nói cần đối chiếu dữ liệu cá nhân với phòng đào tạo.
+- Nếu ngữ cảnh không đủ thông tin, hãy nói: "Mình chưa tìm thấy thông tin này trong các văn bản đã được nhà trường công khai trên hệ thống."
+- Cuối câu trả lời phải có mục "Nguồn tham khảo" nếu có nguồn phù hợp.
+"""
+
+
+def _value_or_unknown(value: Any) -> str:
     if value is None or value == "":
         return "Không rõ"
     return str(value)
+
+
+def _clean_text(value: Any) -> str:
+    """Normalize text for prompt context."""
+    text = str(value or "").strip()
+    return " ".join(text.split())
 
 
 def _build_context_text(contexts: list[dict]) -> str:
@@ -21,7 +47,8 @@ def _build_context_text(contexts: list[dict]) -> str:
     blocks: list[str] = []
 
     for index, item in enumerate(contexts[:MAX_CONTEXTS], start=1):
-        content = str(item.get("content") or "").strip()
+        content = _clean_text(item.get("content"))
+
         if len(content) > MAX_CONTEXT_CONTENT_LENGTH:
             content = content[:MAX_CONTEXT_CONTENT_LENGTH].rstrip() + "..."
 
@@ -39,31 +66,26 @@ def _build_context_text(contexts: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
-def _build_prompt(question: str, contexts: list[dict]) -> str:
-    """Create a grounded Vietnamese prompt for academic QA."""
+def _build_user_prompt(question: str, contexts: list[dict]) -> str:
+    """Create user prompt with question and grounded context."""
     context_text = _build_context_text(contexts)
-    return f"""Bạn là trợ lý học vụ của hệ thống D-CERT.
 
-Nhiệm vụ:
-- Trả lời câu hỏi của sinh viên dựa trên NGỮ CẢNH được cung cấp.
-- Chỉ sử dụng thông tin trong NGỮ CẢNH.
-- Không tự bịa quy định, ngày tháng, địa điểm hoặc điều kiện nếu ngữ cảnh không nêu.
-- Không đưa ra quyết định học vụ cá nhân thay nhà trường.
-- Nếu câu hỏi yêu cầu kết luận cá nhân như "em có đủ điều kiện tốt nghiệp chưa", hãy giải thích điều kiện chung và nói cần đối chiếu dữ liệu cá nhân với phòng đào tạo.
-- Nếu ngữ cảnh không đủ thông tin, hãy nói: "Mình chưa tìm thấy thông tin này trong các văn bản đã được nhà trường công khai trên hệ thống."
-- Trả lời bằng tiếng Việt, rõ ràng, ngắn gọn, dễ hiểu.
-- Cuối câu trả lời nên có mục "Nguồn tham khảo" liệt kê tên văn bản và trang liên quan.
-
-CÂU HỎI:
+    return f"""CÂU HỎI CỦA SINH VIÊN:
 {question}
 
-NGỮ CẢNH:
+NGỮ CẢNH ĐƯỢC TRUY XUẤT TỪ KHO VĂN BẢN:
 {context_text}
 
-Hãy trả lời sinh viên theo cấu trúc:
-- Trả lời ngắn gọn:
-- Chi tiết:
-- Nguồn tham khảo:
+Hãy trả lời sinh viên theo đúng cấu trúc sau:
+
+Trả lời ngắn gọn:
+...
+
+Chi tiết:
+...
+
+Nguồn tham khảo:
+- Tên văn bản, trang, đơn vị ban hành nếu có.
 """
 
 
@@ -71,22 +93,28 @@ def generate_answer_with_ollama(question: str, contexts: list[dict]) -> str:
     """Generate a grounded answer with local Ollama."""
     if not question or not question.strip():
         raise ValueError("question không được rỗng")
+
     if not contexts:
         raise ValueError("contexts không được rỗng")
 
-    prompt = _build_prompt(question.strip(), contexts)
+    user_prompt = _build_user_prompt(question.strip(), contexts)
+
     payload = {
         "model": OLLAMA_MODEL,
         "messages": [
             {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
                 "role": "user",
-                "content": prompt,
-            }
+                "content": user_prompt,
+            },
         ],
         "stream": False,
         "options": {
-            "temperature": 0.2,
-            "top_p": 0.9,
+            "temperature": 0.1,
+            "top_p": 0.85,
             "num_ctx": 4096,
         },
     }
@@ -98,10 +126,13 @@ def generate_answer_with_ollama(question: str, contexts: list[dict]) -> str:
             timeout=OLLAMA_TIMEOUT,
         )
         response.raise_for_status()
+
     except requests.Timeout as exc:
         raise RuntimeError(f"Ollama timeout sau {OLLAMA_TIMEOUT} giây") from exc
+
     except requests.ConnectionError as exc:
         raise RuntimeError(f"Không kết nối được Ollama tại {OLLAMA_BASE_URL}") from exc
+
     except requests.RequestException as exc:
         detail = ""
         if exc.response is not None:
@@ -111,6 +142,7 @@ def generate_answer_with_ollama(question: str, contexts: list[dict]) -> str:
     try:
         data = response.json()
         content = data["message"]["content"].strip()
+
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError("Ollama response không đúng định dạng") from exc
 
