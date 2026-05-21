@@ -40,25 +40,31 @@ function AiChat() {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, thinking]);
 
-    const send = () => {
+    const send = async () => {
         const text = input.trim();
-        if (!text) return;
+        if (!text || thinking) return;
         setInput('');
         setMessages((prev) => [...prev, { role: 'user', text, time: new Date() }]);
         setThinking(true);
 
-        // Simulated delay – replace with real RAG endpoint later
-        setTimeout(() => {
-            setThinking(false);
+        try {
+            const res = await api.post('/ai/chat', { question: text });
+            const { answer, fallback } = res.data.data;
             setMessages((prev) => [
                 ...prev,
-                {
-                    role: 'bot',
-                    text: 'Tính năng AI học vụ đang được phát triển. Vui lòng liên hệ Phòng CTSV để được hỗ trợ trực tiếp.',
-                    time: new Date(),
-                },
+                { role: 'bot', text: answer, fallback: fallback ?? false, time: new Date() },
             ]);
-        }, 1200);
+        } catch (err) {
+            const msg =
+                err.response?.data?.message ||
+                'Hiện tại chưa thể kết nối trợ lý học vụ. Vui lòng thử lại sau.';
+            setMessages((prev) => [
+                ...prev,
+                { role: 'bot', text: msg, fallback: true, time: new Date() },
+            ]);
+        } finally {
+            setThinking(false);
+        }
     };
 
     const fmt = (d) =>

@@ -205,15 +205,22 @@ def _sort_results(results: list[dict]) -> list[dict]:
 
 
 def _build_sources(results: list[dict]) -> list[dict]:
-    """Build source payloads for the frontend."""
+    """Build source payloads for the frontend, deduplicated by (document_id, page)."""
     sources: list[dict] = []
+    seen: set[tuple] = set()
 
     for item in results:
+        doc_id = item.get("document_id")
+        page = item.get("page")
+        key = (doc_id, page)
+        if key in seen:
+            continue
+        seen.add(key)
         sources.append({
-            "document_id": item.get("document_id"),
+            "document_id": doc_id,
             "title": item.get("title"),
             "type": item.get("type"),
-            "page": item.get("page"),
+            "page": page,
             "chunk_index": item.get("chunk_index"),
             "source_unit": item.get("source_unit"),
             "issued_date": item.get("issued_date"),
