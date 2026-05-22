@@ -4,12 +4,14 @@ const { PDFDocument } = require('pdf-lib');
 const QRCode = require('qrcode');
 const { parse: parseCsv } = require('csv-parse/sync');
 const Document = require('../models/Document');
+const { DOCUMENT_TYPES: KNOWLEDGE_DOCUMENT_TYPES } = require('../models/KnowledgeDocument');
 const ShortLink = require('../models/ShortLink');
 const { generateCertificatePDF } = require('../utils/pdfUtils');
 const { hashFile } = require('../utils/hashUtils');
 const { generateShortCode } = require('../utils/stringUtils');
 const blockchainService = require('../services/blockchainService');
 const ipfsService = require('../services/ipfsService');
+const { syncIssuedDocumentToKnowledge } = require('../services/knowledgeSyncService');
 
 /**
  * @route   POST /api/docs/draft
@@ -25,6 +27,57 @@ const parseMetadata = (rawMetadata) => {
         return JSON.parse(rawMetadata);
     } catch {
         return null;
+    }
+};
+
+const parseBooleanField = (value) => value === true || value === 'true' || value === '1';
+
+const parseOptionalKnowledgeDate = (value, fieldName) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        throw new Error(`${fieldName} không phải là ngày hợp lệ`);
+    }
+    return parsed.toISOString();
+};
+
+const parseKnowledgeSync = (body, docType) => {
+    if (!parseBooleanField(body.sendToKnowledge)) return null;
+    if (docType !== 'DECISION') {
+        throw new Error('Chỉ file PDF quyết định/thông báo công khai mới được đưa vào Kho văn bản AI từ bản nháp');
+    }
+
+    const title = (body.knowledgeTitle || '').trim();
+    const type = (body.knowledgeType || '').trim();
+    if (!title) throw new Error('Vui lòng nhập tiêu đề nguồn AI');
+    if (!KNOWLEDGE_DOCUMENT_TYPES.includes(type)) {
+        throw new Error(`Loại nguồn AI không hợp lệ. Chỉ chấp nhận: ${KNOWLEDGE_DOCUMENT_TYPES.join(', ')}`);
+    }
+
+    return {
+        sendToKnowledge: true,
+        title,
+        type,
+        sourceUnit: (body.knowledgeSourceUnit || '').trim() || 'Phòng Đào tạo',
+        issuedDate: parseOptionalKnowledgeDate(body.knowledgeIssuedDate, 'knowledgeIssuedDate'),
+        effectiveFrom: parseOptionalKnowledgeDate(body.knowledgeEffectiveFrom, 'knowledgeEffectiveFrom'),
+        effectiveTo: parseOptionalKnowledgeDate(body.knowledgeEffectiveTo, 'knowledgeEffectiveTo'),
+        status: 'PENDING_ISSUE',
+        requestedAt: new Date().toISOString(),
+    };
+};
+
+const syncIssuedKnowledgeSafely = async (doc, issuedPdfPath, publishedBy) => {
+    try {
+        return await syncIssuedDocumentToKnowledge(doc, issuedPdfPath, publishedBy);
+    } catch (error) {
+        console.error(`Knowledge sync failed after issuing ${doc.docId}:`, error);
+        return {
+            attempted: true,
+            success: false,
+            status: 'FAILED',
+            message: error.message || 'Không thể đồng bộ Kho văn bản AI',
+        };
     }
 };
 
@@ -173,6 +226,13 @@ const createDraftFromUpload = async (req, res) => {
             return res.status(400).json({ success: false, message: 'metadata phải là JSON hợp lệ' });
         }
 
+        let knowledgeSync;
+        try {
+            knowledgeSync = parseKnowledgeSync(req.body, docType);
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+
         const draftQrText = `D-CERT-DRAFT:${resolvedDocId}`;
         stampedPath = path.join(path.dirname(req.file.path), `${resolvedDocId}-${req.file.filename}.pdf`);
         await stampPdfWithQr(req.file.path, stampedPath, draftQrText);
@@ -192,6 +252,7 @@ const createDraftFromUpload = async (req, res) => {
                     originalName: req.file.originalname,
                     draftQrText,
                 },
+                ...(knowledgeSync ? { knowledgeSync } : {}),
             },
             issuer: req.user._id,
         });
@@ -282,6 +343,8 @@ const issueDocument = async (req, res) => {
             docHash,
         });
 
+        const knowledgeSync = await syncIssuedKnowledgeSafely(doc, outputPath, req.user._id);
+
         // Dọn file draft upload sau khi đã phát hành thành công
         if (uploadedDraftPath && fs.existsSync(uploadedDraftPath)) {
             fs.unlinkSync(uploadedDraftPath);
@@ -297,6 +360,7 @@ const issueDocument = async (req, res) => {
                 txHash,
                 verifyUrl,
                 pdfPath:   `/uploads/${doc.docId}.pdf`,
+                knowledgeSync,
             }
         });
 
@@ -583,9 +647,11 @@ const batchIssue = async (req, res) => {
 
             await ShortLink.create({ shortCode, document: doc._id, docHash });
 
+            const knowledgeSync = await syncIssuedKnowledgeSafely(doc, outputPath, req.user._id);
+
             if (uploadedDraftPath && fs.existsSync(uploadedDraftPath)) fs.unlinkSync(uploadedDraftPath);
 
-            results.success.push({ id, docId: doc.docId, holderName: doc.holderName, txHash });
+            results.success.push({ id, docId: doc.docId, holderName: doc.holderName, txHash, knowledgeSync });
         } catch (err) {
             if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
             results.errors.push({ id, reason: err.message || 'Lỗi không xác định' });

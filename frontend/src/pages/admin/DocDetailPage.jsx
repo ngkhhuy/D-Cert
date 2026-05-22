@@ -34,6 +34,9 @@ export default function DocDetailPage() {
             const res = await api.post(`/docs/issue/${id}`);
             setDoc((prev) => ({ ...prev, ...res.data.data, status: 'ACTIVE' }));
             toast.success('Phát hành thành công! Đã ghi lên Sepolia.');
+            if (res.data?.data?.knowledgeSync?.status === 'FAILED') {
+                toast.error('Đồng bộ Kho văn bản AI chưa hoàn tất. Kiểm tra tài liệu trong Kho văn bản AI.', { duration: 6000 });
+            }
         } catch (err) {
             toast.error(err.response?.data?.message || 'Lỗi khi phát hành');
         } finally {
