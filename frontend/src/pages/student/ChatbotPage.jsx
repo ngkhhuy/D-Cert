@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import api from '../../services/api';
 
 const SUGGESTED_QUESTIONS = [
-    'Điều kiện xét tốt nghiệp là gì?',
-    'Khi nào nhận bằng tốt nghiệp?',
-    'Cần mang giấy tờ gì khi nhận bằng?',
-    'Nếu em còn nợ môn thì có được xét tốt nghiệp không?',
+    'Điều kiện mở lớp học phần lý thuyết trong học kỳ hè là gì?',
+    'Thời gian đăng ký học kỳ hè là khi nào?',
+    'Học phí học kỳ hè được nộp khi nào?',
+    'Học phần PBL có được tổ chức trong học kỳ hè không?',
 ];
+
+const CHAT_ERROR_MESSAGE = 'Hiện tại chưa thể kết nối trợ lý học vụ. Vui lòng thử lại sau.';
 
 function formatDate(dateStr) {
     if (!dateStr) return null;
@@ -134,7 +136,15 @@ export default function ChatbotPage() {
         setInput('');
         setMessages((prev) => [
             ...prev,
-            { id: Date.now(), role: 'user', content: text },
+            {
+                id: Date.now(),
+                role: 'user',
+                content: text,
+                sources: [],
+                fallback: false,
+                usedLlm: false,
+                createdAt: new Date().toISOString(),
+            },
         ]);
         setLoading(true);
 
@@ -150,22 +160,11 @@ export default function ChatbotPage() {
                     sources: sources ?? [],
                     fallback: fallback ?? false,
                     usedLlm: usedLlm ?? false,
+                    createdAt: new Date().toISOString(),
                 },
             ]);
-        } catch (err) {
-            const msg = err.response?.data?.message || 'Hiện tại chưa thể kết nối trợ lý học vụ. Vui lòng thử lại sau.';
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: Date.now() + 1,
-                    role: 'assistant',
-                    content: msg,
-                    sources: [],
-                    fallback: true,
-                    usedLlm: false,
-                },
-            ]);
-            setError(msg);
+        } catch {
+            setError(CHAT_ERROR_MESSAGE);
         } finally {
             setLoading(false);
             inputRef.current?.focus();
@@ -233,6 +232,12 @@ export default function ChatbotPage() {
                     )}
 
                     {loading && <LoadingBubble />}
+                    {error && (
+                        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            <span className="material-symbols-outlined text-[18px]">error</span>
+                            {error}
+                        </div>
+                    )}
                     <div ref={bottomRef} />
                 </div>
 

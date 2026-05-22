@@ -375,6 +375,7 @@ export default function KnowledgePage() {
                                     <th className="text-left px-4 py-3 hidden xl:table-cell">Hiệu lực</th>
                                     <th className="text-left px-4 py-3">Trạng thái</th>
                                     <th className="text-left px-4 py-3">AI Index</th>
+                                    <th className="text-left px-4 py-3">Lỗi AI</th>
                                     <th className="text-right px-4 py-3">Hành động</th>
                                 </tr>
                             </thead>
@@ -386,11 +387,6 @@ export default function KnowledgePage() {
                                             {/* Title */}
                                             <td className="px-4 py-3 max-w-[200px]">
                                                 <p className="font-medium text-slate-800 truncate" title={doc.title}>{doc.title}</p>
-                                                {doc.indexError && (
-                                                    <p className="text-[10px] text-red-500 truncate mt-0.5" title={doc.indexError}>
-                                                        ⚠ {doc.indexError}
-                                                    </p>
-                                                )}
                                             </td>
 
                                             {/* Type */}
@@ -417,6 +413,17 @@ export default function KnowledgePage() {
                                                 <Badge cls={AI_BADGE[doc.aiIndexStatus] ?? ''} label={AI_LABEL[doc.aiIndexStatus] ?? doc.aiIndexStatus} />
                                             </td>
 
+                                            {/* AI index error */}
+                                            <td className="px-4 py-3 max-w-[220px]">
+                                                {doc.indexError ? (
+                                                    <p className="text-xs text-red-600 line-clamp-2" title={doc.indexError}>
+                                                        {doc.indexError}
+                                                    </p>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+
                                             {/* Actions */}
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center justify-end gap-2">
@@ -439,7 +446,7 @@ export default function KnowledgePage() {
                                                         </button>
                                                     )}
                                                     {doc.status === 'ARCHIVED' && (
-                                                        <span className="text-[11px] text-slate-400 italic">Chatbot không sử dụng</span>
+                                                        <span className="text-[11px] text-slate-400 italic">Đã lưu trữ</span>
                                                     )}
                                                 </div>
                                             </td>
