@@ -288,8 +288,11 @@ export default function PendingApprovalPage() {
         setIssuingId(confirmDoc._id);
         setConfirmDoc(null);
         try {
-            await api.post(`/docs/issue/${confirmDoc._id}`);
+            const res = await api.post(`/docs/issue/${confirmDoc._id}`);
             toast.success(`✅ Đã ký duyệt và ghi lên Blockchain!`);
+            if (res.data?.data?.knowledgeSync?.status === 'FAILED') {
+                toast.error('Đồng bộ Kho văn bản AI chưa hoàn tất. Kiểm tra tài liệu trong Kho văn bản AI.', { duration: 6000 });
+            }
             if (selectedDocId === confirmDoc._id) {
                 setSelectedDocId(null);
                 setSelectedDocDetail(null);
@@ -341,6 +344,10 @@ export default function PendingApprovalPage() {
             const res = await api.post('/docs/issue/batch', { ids });
             const { success = [], errors = [] } = res.data?.data || {};
             toast.success(`✅ Đã ký duyệt ${success.length} văn bằng!${errors.length ? ` (${errors.length} lỗi)` : ''}`);
+            const knowledgeFailures = success.filter((item) => item.knowledgeSync?.status === 'FAILED');
+            if (knowledgeFailures.length > 0) {
+                toast.error(`${knowledgeFailures.length} tài liệu chưa đồng bộ xong vào Kho văn bản AI.`, { duration: 6000 });
+            }
             if (errors.length > 0) {
                 errors.forEach((e) => toast.error(`${e.docId || e.id}: ${e.reason || 'Lỗi không xác định'}`, { duration: 6000 }));
             }

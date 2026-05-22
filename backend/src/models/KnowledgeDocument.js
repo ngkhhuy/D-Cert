@@ -33,6 +33,13 @@ const knowledgeDocumentSchema = new mongoose.Schema(
         indexedAt: { type: Date },
         indexError: { type: String },
 
+        origin: {
+            type: String,
+            enum: ['MANUAL_UPLOAD', 'ISSUED_DOCUMENT'],
+            default: 'MANUAL_UPLOAD',
+        },
+        sourceDocument: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' },
+
         uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         publishedAt: { type: Date },

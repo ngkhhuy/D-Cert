@@ -17,6 +17,23 @@ const DEGREE_LEVELS = [
     { value: 'MASTER', label: 'Thạc sĩ' },
     { value: 'DOCTOR', label: 'Tiến sĩ' },
 ];
+const KNOWLEDGE_TYPES = [
+    { value: 'ANNOUNCEMENT', label: 'Thông báo' },
+    { value: 'DECISION', label: 'Quyết định' },
+    { value: 'REGULATION', label: 'Quy chế' },
+    { value: 'GUIDELINE', label: 'Hướng dẫn' },
+    { value: 'FAQ', label: 'FAQ' },
+    { value: 'OTHER', label: 'Khác' },
+];
+const EMPTY_KNOWLEDGE_FORM = {
+    sendToKnowledge: false,
+    title: '',
+    type: 'ANNOUNCEMENT',
+    sourceUnit: 'Phòng Đào tạo',
+    issuedDate: '',
+    effectiveFrom: '',
+    effectiveTo: '',
+};
 
 function genDocId() {
     const year = new Date().getFullYear();
@@ -106,6 +123,7 @@ export default function CreateDraftPage() {
     const [csvFile, setCsvFile] = useState(null);
     const [csvResult, setCsvResult] = useState(null);
     const [stats, setStats] = useState({ todayDrafts: 0, pending: 0, rejected: 0 });
+    const [knowledgeForm, setKnowledgeForm] = useState(EMPTY_KNOWLEDGE_FORM);
 
     const [form, setForm] = useState({
         docId: genDocId(),
@@ -119,6 +137,7 @@ export default function CreateDraftPage() {
     });
 
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+    const setKnowledge = (k, v) => setKnowledgeForm((f) => ({ ...f, [k]: v }));
 
     const buildPayload = () => ({
         docId: form.docId,
@@ -138,8 +157,20 @@ export default function CreateDraftPage() {
         if (!pdfFile) {
             throw new Error('Vui lòng chọn file PDF trước khi tạo bản nháp');
         }
+        if (knowledgeForm.sendToKnowledge && !knowledgeForm.title.trim()) {
+            throw new Error('Vui lòng nhập tiêu đề nguồn AI');
+        }
         const fd = new FormData();
         fd.append('file', pdfFile);
+        if (knowledgeForm.sendToKnowledge) {
+            fd.append('sendToKnowledge', 'true');
+            fd.append('knowledgeTitle', knowledgeForm.title.trim());
+            fd.append('knowledgeType', knowledgeForm.type);
+            fd.append('knowledgeSourceUnit', knowledgeForm.sourceUnit.trim());
+            if (knowledgeForm.issuedDate) fd.append('knowledgeIssuedDate', knowledgeForm.issuedDate);
+            if (knowledgeForm.effectiveFrom) fd.append('knowledgeEffectiveFrom', knowledgeForm.effectiveFrom);
+            if (knowledgeForm.effectiveTo) fd.append('knowledgeEffectiveTo', knowledgeForm.effectiveTo);
+        }
         await api.post('/docs/draft/upload', fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -187,13 +218,18 @@ export default function CreateDraftPage() {
         try {
             if (mode === 'upload') {
                 await createUploadDraft();
-                toast.success('Đã upload PDF và tạo bản nháp thành công!');
+                toast.success(
+                    knowledgeForm.sendToKnowledge
+                        ? 'Đã tạo bản nháp. Tài liệu sẽ vào Kho văn bản AI sau khi phát hành.'
+                        : 'Đã upload PDF và tạo bản nháp thành công!'
+                );
             } else {
                 await api.post('/docs/draft', buildPayload());
                 toast.success('Đã tạo bản nháp PDF & QR Code!');
             }
             setForm((f) => ({ ...f, docId: genDocId() }));
             setPdfFile(null);
+            setKnowledgeForm(EMPTY_KNOWLEDGE_FORM);
             setStats((s) => ({ ...s, todayDrafts: s.todayDrafts + 1, pending: s.pending + 1 }));
         } catch (err) {
             toast.error(err.response?.data?.message || err.message || 'Lỗi khi tạo bản nháp');
@@ -346,19 +382,97 @@ export default function CreateDraftPage() {
                     <form id="draft-form" onSubmit={handleDraft}>
                         <div className="p-7 space-y-5">
                             {mode === 'upload' && (
-                                <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
-                                    <p className="text-sm font-medium text-[#003b73] mb-2">Tải lên file PDF văn bản có sẵn để tạo bản nháp chờ ký duyệt</p>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,application/pdf"
-                                        onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
-                                        className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-[#003b73] file:font-semibold hover:file:bg-gray-50"
-                                    />
-                                    {pdfFile && (
-                                        <p className="text-xs text-gray-500 mt-2">Đã chọn: {pdfFile.name}</p>
-                                    )}
-                                    <p className="text-xs text-blue-700/80 mt-2">Khong can nhap metadata. He thong se tu tao draft va dong QR vao goc PDF.</p>
-                                </div>
+                                <>
+                                    <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                                        <p className="text-sm font-medium text-[#003b73] mb-2">Tải lên file PDF văn bản có sẵn để tạo bản nháp chờ ký duyệt</p>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,application/pdf"
+                                            onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                                            className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-[#003b73] file:font-semibold hover:file:bg-gray-50"
+                                        />
+                                        {pdfFile && (
+                                            <p className="text-xs text-gray-500 mt-2">Đã chọn: {pdfFile.name}</p>
+                                        )}
+                                        <p className="text-xs text-blue-700/80 mt-2">Không cần nhập metadata cho bản nháp. Hệ thống sẽ tự tạo draft và đóng QR vào PDF.</p>
+                                    </div>
+
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                                        <label className="flex items-start gap-3 text-sm text-slate-700 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={knowledgeForm.sendToKnowledge}
+                                                onChange={(e) => setKnowledge('sendToKnowledge', e.target.checked)}
+                                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#003b73] focus:ring-blue-200"
+                                            />
+                                            <span>
+                                                <span className="block font-semibold text-[#003b73]">Sau khi phát hành, thêm tài liệu này vào Kho văn bản AI</span>
+                                                <span className="block text-xs text-slate-500 mt-0.5">Trợ lý học vụ chỉ index PDF chính thức sau khi ký duyệt thành công.</span>
+                                            </span>
+                                        </label>
+
+                                        {knowledgeForm.sendToKnowledge && (
+                                            <div className="space-y-4 border-t border-slate-200 pt-4">
+                                                <p className="text-sm font-semibold text-[#003b73]">Thông tin nguồn cho Trợ lý học vụ</p>
+                                                <FormField label="Tiêu đề văn bản">
+                                                    <input
+                                                        value={knowledgeForm.title}
+                                                        onChange={(e) => setKnowledge('title', e.target.value)}
+                                                        required
+                                                        className="field-input"
+                                                        placeholder="VD: Thông báo tổ chức học kỳ hè"
+                                                    />
+                                                </FormField>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <FormField label="Loại nguồn AI">
+                                                        <select
+                                                            value={knowledgeForm.type}
+                                                            onChange={(e) => setKnowledge('type', e.target.value)}
+                                                            className="field-input appearance-none"
+                                                        >
+                                                            {KNOWLEDGE_TYPES.map((type) => (
+                                                                <option key={type.value} value={type.value}>{type.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </FormField>
+                                                    <FormField label="Đơn vị ban hành">
+                                                        <input
+                                                            value={knowledgeForm.sourceUnit}
+                                                            onChange={(e) => setKnowledge('sourceUnit', e.target.value)}
+                                                            className="field-input"
+                                                        />
+                                                    </FormField>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <FormField label="Ngày ban hành">
+                                                        <input
+                                                            type="date"
+                                                            value={knowledgeForm.issuedDate}
+                                                            onChange={(e) => setKnowledge('issuedDate', e.target.value)}
+                                                            className="field-input"
+                                                        />
+                                                    </FormField>
+                                                    <FormField label="Hiệu lực từ">
+                                                        <input
+                                                            type="date"
+                                                            value={knowledgeForm.effectiveFrom}
+                                                            onChange={(e) => setKnowledge('effectiveFrom', e.target.value)}
+                                                            className="field-input"
+                                                        />
+                                                    </FormField>
+                                                    <FormField label="Hiệu lực đến">
+                                                        <input
+                                                            type="date"
+                                                            value={knowledgeForm.effectiveTo}
+                                                            onChange={(e) => setKnowledge('effectiveTo', e.target.value)}
+                                                            className="field-input"
+                                                        />
+                                                    </FormField>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
                             )}
 
                             {mode === 'manual' && (
