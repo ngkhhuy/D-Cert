@@ -1,21 +1,70 @@
 from datetime import date, datetime
+import logging
 import os
+import re
 from typing import Optional
+import unicodedata
 
 from app.schemas.ingest_schema import IngestRequest
 from app.services.chunker import chunk_text
 from app.services.embedder import embed_query, embed_texts
 from app.services.pdf_loader import load_pdf_pages
-from app.services.vector_store import add_vectors, remove_document, search_vectors
+from app.services.vector_store import add_vectors, load_metadata, remove_document, search_vectors
 
 
 SUPPORTED_EXTENSIONS = {".pdf"}
-RETRIEVAL_THRESHOLD = 0.35
-TOP_K = 8
+RETRIEVAL_THRESHOLD = 0.30
+TOP_K = 12
 FINAL_CONTEXTS = 5
 RECENCY_SCORE_DELTA = 0.05
 MAX_EXCERPT_LENGTH = 350
 MAX_CONTEXT_PREVIEW_LENGTH = 900
+
+logger = logging.getLogger(__name__)
+
+KEYWORD_STOPWORDS = {
+    "la",
+    "gi",
+    "bao",
+    "nhieu",
+    "thi",
+    "co",
+    "duoc",
+    "khong",
+    "cua",
+    "trong",
+    "nhu",
+    "the",
+    "nao",
+    "bi",
+    "va",
+    "voi",
+    "cho",
+    "cac",
+    "mot",
+    "nhung",
+    "sinh",
+    "vien",
+    "ve",
+    "de",
+    "tu",
+    "den",
+}
+
+IMPORTANT_KEYWORD_PHRASES = (
+    "điểm rèn luyện",
+    "xếp loại",
+    "kém",
+    "yếu",
+    "xuất sắc",
+    "chương trình đại trà",
+    "tiếng anh",
+    "đầu ra",
+    "toeic",
+    "chuẩn cntt",
+    "mô-đun",
+    "tiết học",
+)
 
 FALLBACK_ANSWER = (
     "Mình chưa tìm thấy thông tin phù hợp trong các văn bản học vụ đã được "
@@ -142,6 +191,120 @@ def _is_effective(item: dict) -> bool:
     return True
 
 
+def _is_usable_source_item(item: dict) -> bool:
+    """Return True when a chunk can be used as answer context."""
+    content = item.get("content")
+    if item.get("status") != "PUBLISHED":
+        return False
+    if not _is_effective(item):
+        return False
+    if not content or not str(content).strip():
+        return False
+    return True
+
+
+def _normalize_keyword_text(value: str) -> str:
+    """Normalize Vietnamese text for accent-insensitive keyword matching."""
+    text = unicodedata.normalize("NFD", str(value or "").casefold())
+    text = "".join(char for char in text if unicodedata.category(char) != "Mn")
+    text = text.replace("đ", "d")
+    text = re.sub(r"[^0-9a-z]+", " ", text)
+    return " ".join(text.split())
+
+
+def _extract_keywords(question: str) -> list[str]:
+    """Extract weighted phrases and useful terms from a student question."""
+    normalized_question = _normalize_keyword_text(question)
+    keywords: list[str] = []
+
+    for phrase in IMPORTANT_KEYWORD_PHRASES:
+        normalized_phrase = _normalize_keyword_text(phrase)
+        if normalized_phrase and normalized_phrase in normalized_question:
+            keywords.append(normalized_phrase)
+
+    for token in normalized_question.split():
+        if len(token) <= 1 or token in KEYWORD_STOPWORDS:
+            continue
+        keywords.append(token)
+
+    return list(dict.fromkeys(keywords))
+
+
+def _score_keyword_match(item: dict, keywords: list[str]) -> tuple[int, list[str]]:
+    """Score a metadata chunk by the number and weight of matched keywords."""
+    if not keywords:
+        return 0, []
+
+    content_text = _normalize_keyword_text(item.get("content", ""))
+    title_text = _normalize_keyword_text(item.get("title", ""))
+    haystack = f"{title_text} {content_text}".strip()
+    score = 0
+    matches: list[str] = []
+
+    for keyword in keywords:
+        if keyword not in haystack:
+            continue
+
+        matches.append(keyword)
+        score += 3 if " " in keyword else 1
+        if keyword in title_text:
+            score += 1
+
+    return score, matches
+
+
+def _keyword_fallback_search(question: str) -> list[dict]:
+    """Search metadata.json by keywords when semantic search misses table text."""
+    keywords = _extract_keywords(question)
+    if not keywords:
+        return []
+
+    candidates: list[dict] = []
+    for item in load_metadata():
+        if not _is_usable_source_item(item):
+            continue
+
+        keyword_score, matches = _score_keyword_match(item, keywords)
+        if keyword_score <= 0:
+            continue
+
+        candidate = dict(item)
+        candidate["_keyword_score"] = keyword_score
+        candidate["_keyword_matches"] = matches
+        candidate["score"] = min(0.99, 0.30 + (keyword_score * 0.05))
+        candidates.append(candidate)
+
+    return sorted(
+        candidates,
+        key=lambda item: (
+            int(item.get("_keyword_score", 0) or 0),
+            _parse_date(item.get("issued_date")) or date.min,
+        ),
+        reverse=True,
+    )
+
+
+def _result_rank_score(item: dict) -> float:
+    return float(item.get("_keyword_score", item.get("score", 0)) or 0)
+
+
+def _summarize_results(results: list[dict]) -> list[dict]:
+    """Build compact debug payloads without logging full document chunks."""
+    summary: list[dict] = []
+    for item in results:
+        summary.append({
+            "document_id": item.get("document_id"),
+            "title": item.get("title"),
+            "page": item.get("page"),
+            "chunk_index": item.get("chunk_index"),
+            "score": item.get("score"),
+            "keyword_score": item.get("_keyword_score"),
+            "keyword_matches": item.get("_keyword_matches"),
+            "status": item.get("status"),
+        })
+    return summary
+
+
 def _safe_excerpt(text: str, max_len: int = MAX_EXCERPT_LENGTH) -> str:
     """Trim long text for source previews."""
     if not text:
@@ -167,7 +330,7 @@ def _sort_results(results: list[dict]) -> list[dict]:
     # Step A: sort all items by score descending
     sorted_by_score = sorted(
         results,
-        key=lambda item: float(item.get("score", 0) or 0),
+        key=_result_rank_score,
         reverse=True,
     )
 
@@ -180,8 +343,8 @@ def _sort_results(results: list[dict]) -> list[dict]:
         if not current_group:
             current_group.append(item)
         else:
-            group_top_score = float(current_group[0].get("score", 0) or 0)
-            item_score = float(item.get("score", 0) or 0)
+            group_top_score = _result_rank_score(current_group[0])
+            item_score = _result_rank_score(item)
             if group_top_score - item_score <= RECENCY_SCORE_DELTA:
                 current_group.append(item)
             else:
@@ -252,33 +415,28 @@ def answer_question(question: str, student_id: str | None = None) -> dict:
     question = question.strip()
     query_embedding = embed_query(question)
     raw_results = search_vectors(query_embedding, top_k=TOP_K)
-
-    if not raw_results:
-        return {
-            "answer": FALLBACK_ANSWER,
-            "sources": [],
-            "fallback": True,
-            "used_llm": False,
-        }
+    logger.debug("raw semantic results: %s", _summarize_results(raw_results))
 
     filtered: list[dict] = []
     for item in raw_results:
         score = float(item.get("score", 0) or 0)
-        status = item.get("status")
-        content = item.get("content")
 
         if score < RETRIEVAL_THRESHOLD:
             continue
-        if status != "PUBLISHED":
-            continue
-        if not _is_effective(item):
-            continue
-        if not content or not str(content).strip():
+        if not _is_usable_source_item(item):
             continue
 
         filtered.append(item)
 
+    logger.debug("filtered semantic results: %s", _summarize_results(filtered))
+
+    keyword_results: list[dict] = []
     if not filtered:
+        keyword_results = _keyword_fallback_search(question)
+    logger.debug("keyword fallback results: %s", _summarize_results(keyword_results))
+
+    retrieval_results = filtered or keyword_results
+    if not retrieval_results:
         return {
             "answer": FALLBACK_ANSWER,
             "sources": [],
@@ -286,7 +444,7 @@ def answer_question(question: str, student_id: str | None = None) -> dict:
             "used_llm": False,
         }
 
-    sorted_results = _sort_results(filtered)
+    sorted_results = _sort_results(retrieval_results)
     final_results = sorted_results[:FINAL_CONTEXTS]
     sources = _build_sources(final_results)
 
