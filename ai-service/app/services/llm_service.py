@@ -27,6 +27,7 @@ QUY TẮC BẮT BUỘC:
 - Nếu câu hỏi yêu cầu kết luận cá nhân như "em có đủ điều kiện không", hãy giải thích điều kiện chung và nói cần đối chiếu dữ liệu cá nhân với phòng đào tạo.
 - Nếu ngữ cảnh không đủ thông tin, hãy nói: "Mình chưa tìm thấy thông tin này trong các văn bản đã được nhà trường công khai trên hệ thống."
 - Cuối câu trả lời phải có mục "Nguồn tham khảo" nếu có nguồn phù hợp.
+- Trả lời bằng văn bản thuần, không dùng Markdown, không bôi đậm, không bao quanh tiêu đề hoặc câu bằng dấu **.
 """
 
 
@@ -40,6 +41,12 @@ def _clean_text(value: Any) -> str:
     """Normalize text for prompt context."""
     text = str(value or "").strip()
     return " ".join(text.split())
+
+
+def _normalize_answer_text(value: Any) -> str:
+    """Remove lightweight Markdown that the model may add despite instructions."""
+    text = str(value or "").strip()
+    return text.replace("**", "").replace("__", "").strip()
 
 
 def _build_context_text(contexts: list[dict]) -> str:
@@ -76,7 +83,8 @@ def _build_user_prompt(question: str, contexts: list[dict]) -> str:
 NGỮ CẢNH ĐƯỢC TRUY XUẤT TỪ KHO VĂN BẢN:
 {context_text}
 
-Hãy trả lời sinh viên theo đúng cấu trúc sau:
+Hãy trả lời sinh viên theo đúng cấu trúc sau.
+Chỉ dùng văn bản thuần, không dùng Markdown, không bôi đậm tiêu đề bằng dấu **:
 
 Trả lời ngắn gọn:
 ...
@@ -141,7 +149,7 @@ def generate_answer_with_ollama(question: str, contexts: list[dict]) -> str:
 
     try:
         data = response.json()
-        content = data["message"]["content"].strip()
+        content = _normalize_answer_text(data["message"]["content"])
 
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError("Ollama response không đúng định dạng") from exc
