@@ -32,6 +32,10 @@ const chatMessageSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        sessionId: {
+            type: String,
+            default: null,
+        },
         llmError: {
             type: String,
             default: null,

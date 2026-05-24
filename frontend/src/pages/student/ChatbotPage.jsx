@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import api from '../../services/api';
+
+const generateSessionId = () => `sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const SUGGESTED_QUESTIONS = [
     'Điều kiện mở lớp học phần lý thuyết trong học kỳ hè là gì?',
@@ -136,12 +138,85 @@ export default function ChatbotPage() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const [history, setHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [deleteConfirm, setDeleteConfirm] = useState(false);
+
     const bottomRef = useRef(null);
     const inputRef = useRef(null);
+    const sessionIdRef = useRef(generateSessionId());
+
+    // Load history on mount
+    useEffect(() => {
+        api.get('/ai/history?limit=50')
+            .then((res) => setHistory(res.data.data || []))
+            .catch(() => {})
+            .finally(() => setHistoryLoading(false));
+    }, []);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, loading]);
+
+    // Group sessions by date (newest day first)
+    const groupedHistory = useMemo(() => {
+        const groups = {};
+        history.forEach((session) => {
+            const day = new Date(session.startedAt).toLocaleDateString('vi-VN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            });
+            if (!groups[day]) groups[day] = [];
+            groups[day].push(session);
+        });
+        return Object.entries(groups);
+    }, [history]);
+
+    const startNewChat = () => {
+        setMessages([]);
+        setError(null);
+        sessionIdRef.current = generateSessionId();
+        setTimeout(() => inputRef.current?.focus(), 50);
+    };
+
+    const loadHistorySession = (session) => {
+        const msgs = session.messages.flatMap((m) => [
+            {
+                id: `h-u-${m._id}`,
+                role: 'user',
+                content: m.question,
+                sources: [],
+                fallback: false,
+                usedLlm: false,
+                createdAt: m.createdAt,
+            },
+            {
+                id: `h-a-${m._id}`,
+                role: 'assistant',
+                content: m.answer,
+                sources: m.sources ?? [],
+                fallback: m.fallback ?? false,
+                usedLlm: m.usedLlm ?? false,
+                createdAt: m.createdAt,
+            },
+        ]);
+        setMessages(msgs);
+        setError(null);
+    };
+
+    const handleDeleteHistory = async () => {
+        try {
+            await api.delete('/ai/history');
+            setHistory([]);
+            setMessages([]);
+            setDeleteConfirm(false);
+        } catch {
+            setDeleteConfirm(false);
+        }
+    };
 
     const sendQuestion = async (question) => {
         const text = (question ?? input).trim();
@@ -164,20 +239,37 @@ export default function ChatbotPage() {
         setLoading(true);
 
         try {
-            const res = await api.post('/ai/chat', { question: text });
+            const res = await api.post('/ai/chat', { question: text, sessionId: sessionIdRef.current });
             const { answer, sources, fallback, usedLlm } = res.data.data;
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: Date.now() + 1,
-                    role: 'assistant',
-                    content: answer,
-                    sources: sources ?? [],
-                    fallback: fallback ?? false,
-                    usedLlm: usedLlm ?? false,
-                    createdAt: new Date().toISOString(),
-                },
-            ]);
+            const botMsg = {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: answer,
+                sources: sources ?? [],
+                fallback: fallback ?? false,
+                usedLlm: usedLlm ?? false,
+                createdAt: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, botMsg]);
+            // Update session in sidebar history cache
+            const newMsg = {
+                _id: `new-${Date.now()}`,
+                question: text,
+                answer,
+                sources: sources ?? [],
+                fallback: fallback ?? false,
+                usedLlm: usedLlm ?? false,
+                createdAt: new Date().toISOString(),
+            };
+            setHistory((prev) => {
+                const idx = prev.findIndex((s) => s.sessionId === sessionIdRef.current);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], messages: [...updated[idx].messages, newMsg] };
+                    return updated;
+                }
+                return [{ sessionId: sessionIdRef.current, startedAt: new Date().toISOString(), messages: [newMsg] }, ...prev];
+            });
         } catch {
             setError(CHAT_ERROR_MESSAGE);
         } finally {
@@ -194,27 +286,159 @@ export default function ChatbotPage() {
     };
 
     return (
-        <div className="max-w-3xl mx-auto space-y-4">
-            {/* Header */}
-            <div>
-                <h1
-                    className="text-2xl font-extrabold text-[#003b73] tracking-tight"
-                    style={{ fontFamily: 'Manrope, sans-serif' }}
-                >
-                    Trợ lý học vụ
-                </h1>
-                <p className="text-sm text-slate-500 mt-0.5">
-                    Hỏi đáp quy chế, thông báo và văn bản học vụ đã được nhà trường công khai.
-                </p>
-            </div>
+        <div className="flex gap-4" style={{ height: 'calc(100vh - 140px)', minHeight: '560px' }}>
 
-            {/* Chat box */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col" style={{ minHeight: '520px' }}>
+            {/* ── History Sidebar ── */}
+            {sidebarOpen && (
+                <aside className="w-64 shrink-0 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {/* Sidebar header */}
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[#003b73] text-[18px]">history</span>
+                            <span
+                                className="text-sm font-bold text-[#003b73]"
+                                style={{ fontFamily: 'Manrope, sans-serif' }}
+                            >
+                                Lịch sử
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setSidebarOpen(false)}
+                            className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                            title="Ẩn lịch sử"
+                        >
+                            <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                        </button>
+                    </div>
+
+                    {/* New chat button */}
+                    <div className="px-3 py-2 border-b border-slate-50">
+                        <button
+                            onClick={startNewChat}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#003b73] border border-[#003b73]/20 hover:bg-[#003b73]/5 transition-colors"
+                        >
+                            <span className="material-symbols-outlined text-[16px]">add</span>
+                            Cuộc trò chuyện mới
+                        </button>
+                    </div>
+
+                    {/* History list */}
+                    <div className="flex-1 overflow-y-auto py-1">
+                        {historyLoading ? (
+                            <div className="space-y-2 px-3 pt-3">
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="h-9 bg-slate-100 rounded-lg animate-pulse" />
+                                ))}
+                            </div>
+                        ) : groupedHistory.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center mt-10 px-4">
+                                Chưa có lịch sử trò chuyện.
+                            </p>
+                        ) : (
+                            groupedHistory.map(([day, items]) => (
+                                <div key={day} className="mb-1">
+                                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase text-slate-400 tracking-wide">
+                                        {day}
+                                    </p>
+                                    {items.map((session) => {
+                                        const preview = session.messages[0]?.question ?? '';
+                                        return (
+                                            <button
+                                                key={session.sessionId}
+                                                onClick={() => loadHistorySession(session)}
+                                                title={preview}
+                                                className="w-full text-left px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-[#003b73] transition-colors"
+                                            >
+                                                <span className="flex items-center justify-between gap-1">
+                                                    <span className="block truncate flex-1">
+                                                        {preview.length > 42 ? preview.slice(0, 42) + '…' : preview}
+                                                    </span>
+                                                    {session.messages.length > 1 && (
+                                                        <span className="shrink-0 text-[10px] bg-slate-100 text-slate-400 rounded-full px-1.5 py-0.5">
+                                                            {session.messages.length}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Delete all */}
+                    {history.length > 0 && (
+                        <div className="px-3 py-3 border-t border-slate-100">
+                            {deleteConfirm ? (
+                                <div className="space-y-1.5">
+                                    <p className="text-[11px] text-red-600 text-center font-medium">Xóa toàn bộ lịch sử?</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleDeleteHistory}
+                                            className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+                                        >
+                                            Xóa
+                                        </button>
+                                        <button
+                                            onClick={() => setDeleteConfirm(false)}
+                                            className="flex-1 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-colors"
+                                        >
+                                            Hủy
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setDeleteConfirm(true)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                                    Xóa toàn bộ lịch sử
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </aside>
+            )}
+
+            {/* ── Main Chat Panel ── */}
+            <div className="flex-1 min-w-0 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {/* Chat header */}
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                    {!sidebarOpen && (
+                        <button
+                            onClick={() => setSidebarOpen(true)}
+                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                            title="Xem lịch sử"
+                        >
+                            <span className="material-symbols-outlined text-[18px]">history</span>
+                        </button>
+                    )}
+                    <div className="flex-1 min-w-0">
+                        <h1
+                            className="text-base font-extrabold text-[#003b73] tracking-tight leading-tight"
+                            style={{ fontFamily: 'Manrope, sans-serif' }}
+                        >
+                            Trợ lý học vụ
+                        </h1>
+                        <p className="text-xs text-slate-400">
+                            Hỏi đáp quy chế, thông báo và văn bản học vụ đã được công khai.
+                        </p>
+                    </div>
+                    <button
+                        onClick={startNewChat}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#003b73] border border-[#003b73]/20 hover:bg-[#003b73]/5 transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[14px]">add</span>
+                        Mới
+                    </button>
+                </div>
+
                 {/* Message list */}
                 <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
                     {messages.length === 0 && !loading && (
-                        /* Empty state */
-                        <div className="flex flex-col items-center justify-center h-64 text-center gap-4">
+                        <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-10">
                             <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
                                 <span className="material-symbols-outlined text-[#003b73] text-3xl">smart_toy</span>
                             </div>
@@ -224,8 +448,6 @@ export default function ChatbotPage() {
                                     Bạn có thể hỏi về quy chế học vụ, điều kiện xét tốt nghiệp, thông báo nhận bằng hoặc các văn bản đã được nhà trường công khai.
                                 </p>
                             </div>
-
-                            {/* Suggested questions */}
                             <div className="flex flex-wrap gap-2 justify-center mt-1">
                                 {SUGGESTED_QUESTIONS.map((q) => (
                                     <button
@@ -256,7 +478,6 @@ export default function ChatbotPage() {
                     <div ref={bottomRef} />
                 </div>
 
-                {/* Divider */}
                 <div className="border-t border-slate-100" />
 
                 {/* Input area */}
@@ -281,22 +502,6 @@ export default function ChatbotPage() {
                     </button>
                 </div>
             </div>
-
-            {/* Suggested questions below chat (when messages exist) */}
-            {messages.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {SUGGESTED_QUESTIONS.map((q) => (
-                        <button
-                            key={q}
-                            onClick={() => sendQuestion(q)}
-                            disabled={loading}
-                            className="text-xs bg-white border border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 rounded-full px-3 py-1.5 transition-colors"
-                        >
-                            {q}
-                        </button>
-                    ))}
-                </div>
-            )}
         </div>
     );
 }

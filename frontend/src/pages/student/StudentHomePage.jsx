@@ -3,15 +3,12 @@ import api from '../../services/api';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function timeAgoVi(dateStr) {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return 'vừa xong';
-    if (m < 60) return `${m} phút trước`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h} giờ trước`;
-    const d = Math.floor(h / 24);
-    if (d < 30) return `${d} ngày trước`;
-    return new Date(dateStr).toLocaleDateString('vi-VN');
+    if (!dateStr) return 'Không rõ';
+    return new Date(dateStr).toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
 }
 
 function shortTxHash(hash) {
@@ -168,8 +165,8 @@ function AiChat() {
 function DocCard({ doc }) {
     const icon = DOC_ICON[doc.docType] || 'description';
     const txShort = shortTxHash(doc.txHash);
-    const unit = doc.metadata?.unit || doc.issuer?.fullName || 'Trường ĐHBK Đà Nẵng';
-    const title = doc.metadata?.title || doc.holderName || doc.docId;
+    const unit = doc.metadata?.knowledgeSync?.sourceUnit || doc.metadata?.unit || doc.issuer?.fullName || 'Trường ĐHBK Đà Nẵng';
+    const title = doc.metadata?.knowledgeSync?.title || doc.metadata?.title || doc.holderName || doc.docId;
     const pdfUrl = `/uploads/${doc.docId}.pdf`;
 
     return (

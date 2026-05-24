@@ -195,7 +195,7 @@ const createDraftFromUpload = async (req, res) => {
         const resolvedDocId = (docId || '').trim() || genUploadDocId();
         const inferredHolderName =
             (holderName || '').trim() ||
-            path.parse(req.file.originalname).name ||
+            (req.body.knowledgeTitle || '').trim() ||
             `Van ban ${resolvedDocId}`;
 
         const validTypes = ['DIPLOMA', 'DECISION', 'TRANSCRIPT'];
