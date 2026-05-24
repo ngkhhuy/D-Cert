@@ -7,7 +7,7 @@ const getAiServiceUrl = () => (process.env.AI_SERVICE_URL || '').replace(/\/$/, 
 
 const chatWithAI = async (req, res) => {
     try {
-        const { question } = req.body;
+        const { question, sessionId } = req.body;
 
         if (!question || !question.trim()) {
             return res.status(400).json({ success: false, message: 'Câu hỏi không được để trống.' });
@@ -58,6 +58,7 @@ const chatWithAI = async (req, res) => {
         await ChatMessage.create({
             user: req.user._id,
             studentId: req.user?.studentId || null,
+            sessionId: sessionId || null,
             question: question.trim(),
             answer,
             sources,
@@ -77,4 +78,50 @@ const chatWithAI = async (req, res) => {
     }
 };
 
-module.exports = { chatWithAI };
+const getChatHistory = async (req, res) => {
+    try {
+        const messages = await ChatMessage.find({ user: req.user._id })
+            .sort({ createdAt: 1 })
+            .limit(300)
+            .select('question answer sources fallback usedLlm sessionId createdAt');
+
+        // Group by sessionId; old messages without sessionId each become their own session
+        const sessionMap = new Map();
+        for (const msg of messages) {
+            const key = msg.sessionId || msg._id.toString();
+            if (!sessionMap.has(key)) {
+                sessionMap.set(key, { sessionId: key, startedAt: msg.createdAt, messages: [] });
+            }
+            sessionMap.get(key).messages.push({
+                _id: msg._id,
+                question: msg.question,
+                answer: msg.answer,
+                sources: msg.sources,
+                fallback: msg.fallback,
+                usedLlm: msg.usedLlm,
+                createdAt: msg.createdAt,
+            });
+        }
+
+        const sessions = [...sessionMap.values()].sort(
+            (a, b) => new Date(b.startedAt) - new Date(a.startedAt)
+        );
+
+        return res.json({ success: true, data: sessions });
+    } catch (error) {
+        console.error('getChatHistory error:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+const deleteChatHistory = async (req, res) => {
+    try {
+        await ChatMessage.deleteMany({ user: req.user._id });
+        return res.json({ success: true, message: 'Đã xóa toàn bộ lịch sử trò chuyện.' });
+    } catch (error) {
+        console.error('deleteChatHistory error:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+};
+
+module.exports = { chatWithAI, getChatHistory, deleteChatHistory };
