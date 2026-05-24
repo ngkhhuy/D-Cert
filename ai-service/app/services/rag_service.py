@@ -8,6 +8,7 @@ import unicodedata
 from app.schemas.ingest_schema import IngestRequest
 from app.services.chunker import chunk_text
 from app.services.embedder import embed_query, embed_texts
+from app.services.generated_chunks import build_generated_chunks
 from app.services.pdf_loader import load_pdf_pages
 from app.services.vector_store import add_vectors, load_metadata, remove_document, search_vectors
 
@@ -100,6 +101,16 @@ def ingest_document(req: IngestRequest) -> dict:
     all_chunks: list[str] = []
     metadatas: list[dict] = []
     ingested_at = datetime.utcnow().isoformat()
+    base_metadata = {
+        "document_id": req.document_id,
+        "title": req.title,
+        "type": req.type,
+        "source_unit": req.source_unit,
+        "issued_date": req.issued_date,
+        "effective_from": req.effective_from,
+        "effective_to": req.effective_to,
+        "status": "PUBLISHED",
+    }
 
     for page in pages:
         chunks = chunk_text(page["text"], chunk_size=1000, overlap=200)
@@ -107,19 +118,26 @@ def ingest_document(req: IngestRequest) -> dict:
             chunk_index = len(all_chunks)
             all_chunks.append(chunk)
             metadatas.append({
-                "document_id": req.document_id,
-                "title": req.title,
-                "type": req.type,
-                "source_unit": req.source_unit,
-                "issued_date": req.issued_date,
-                "effective_from": req.effective_from,
-                "effective_to": req.effective_to,
+                **base_metadata,
                 "page": page["page"],
                 "chunk_index": chunk_index,
                 "content": chunk,
-                "status": "PUBLISHED",
                 "ingested_at": ingested_at,
             })
+
+    generated_chunks = build_generated_chunks(
+        pages,
+        {
+            **base_metadata,
+            "chunk_index_start": len(all_chunks),
+        },
+    )
+    for generated_chunk in generated_chunks:
+        all_chunks.append(generated_chunk["content"])
+        metadatas.append({
+            **generated_chunk,
+            "ingested_at": ingested_at,
+        })
 
     if not all_chunks:
         return {
@@ -144,6 +162,7 @@ def ingest_document(req: IngestRequest) -> dict:
             "title": req.title,
             "pages": len(pages),
             "chunks": len(all_chunks),
+            "generated_chunks": len(generated_chunks),
             "removed_old_chunks": remove_result["removed"],
             "vector_store": result,
         },
