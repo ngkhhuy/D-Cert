@@ -42,6 +42,9 @@ function SourceCard({ source }) {
 }
 
 function AssistantBubble({ msg }) {
+    const [showSources, setShowSources] = useState(false);
+    const sourceCount = msg.sources?.length ?? 0;
+
     return (
         <div className="flex gap-3 items-start">
             {/* Avatar */}
@@ -78,14 +81,26 @@ function AssistantBubble({ msg }) {
                 </div>
 
                 {/* Sources */}
-                {msg.sources?.length > 0 && (
+                {sourceCount > 0 && (
                     <div className="space-y-1.5">
-                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                            Nguồn tham khảo
-                        </p>
-                        {msg.sources.map((src, i) => (
-                            <SourceCard key={i} source={src} />
-                        ))}
+                        <button
+                            type="button"
+                            onClick={() => setShowSources((value) => !value)}
+                            aria-expanded={showSources}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                            <span className="material-symbols-outlined text-[15px]">
+                                {showSources ? 'expand_less' : 'expand_more'}
+                            </span>
+                            Nguồn tham khảo ({sourceCount})
+                        </button>
+                        {showSources && (
+                            <div className="space-y-1.5">
+                                {msg.sources.map((src, i) => (
+                                    <SourceCard key={i} source={src} />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
