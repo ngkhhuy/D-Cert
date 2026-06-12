@@ -33,15 +33,6 @@ const AI_LABEL = {
     FAILED:      'Thất bại',
 };
 
-const EMPTY_FORM = {
-    title: '',
-    type: 'REGULATION',
-    sourceUnit: 'Phòng Đào tạo',
-    issuedDate: '',
-    effectiveFrom: '',
-    effectiveTo: '',
-};
-
 function formatDate(val) {
     if (!val) return '—';
     try { return new Date(val).toLocaleDateString('vi-VN'); } catch { return val; }
@@ -61,137 +52,12 @@ function Badge({ cls, label }) {
     );
 }
 
-// ── Upload form ───────────────────────────────────────────────────────────────
-function UploadForm({ onUploaded }) {
-    const [form, setForm] = useState(EMPTY_FORM);
-    const [file, setFile] = useState(null);
-    const [submitting, setSubmitting] = useState(false);
 
-    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!form.title.trim()) { toast.error('Vui lòng nhập tên văn bản'); return; }
-        if (!file) { toast.error('Vui lòng chọn file'); return; }
-
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('title', form.title.trim());
-        fd.append('type', form.type);
-        if (form.sourceUnit.trim()) fd.append('sourceUnit', form.sourceUnit.trim());
-        if (form.issuedDate) fd.append('issuedDate', form.issuedDate);
-        if (form.effectiveFrom) fd.append('effectiveFrom', form.effectiveFrom);
-        if (form.effectiveTo) fd.append('effectiveTo', form.effectiveTo);
-
-        setSubmitting(true);
-        try {
-            await api.post('/knowledge', fd, { headers: { 'Content-Type': undefined } });
-            toast.success('Upload văn bản thành công. Văn bản đang ở trạng thái DRAFT.');
-            setForm(EMPTY_FORM);
-            setFile(null);
-            e.target.reset();
-            onUploaded();
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Upload thất bại');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    return (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <h2 className="font-bold text-[#003b73] text-base mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                Upload văn bản mới
-            </h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Title */}
-                <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Tên văn bản <span className="text-red-500">*</span></label>
-                    <input
-                        type="text"
-                        value={form.title}
-                        onChange={(e) => set('title', e.target.value)}
-                        placeholder="VD: Quy chế học vụ 2025"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        required
-                    />
-                </div>
-
-                {/* Type */}
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Loại văn bản <span className="text-red-500">*</span></label>
-                    <select
-                        value={form.type}
-                        onChange={(e) => set('type', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-                    >
-                        {DOC_TYPES.map(({ value, label }) => (
-                            <option key={value} value={value}>{label}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Source unit */}
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Đơn vị ban hành</label>
-                    <input
-                        type="text"
-                        value={form.sourceUnit}
-                        onChange={(e) => set('sourceUnit', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
-                </div>
-
-                {/* Dates */}
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Ngày ban hành</label>
-                    <input type="date" value={form.issuedDate} onChange={(e) => set('issuedDate', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Hiệu lực từ</label>
-                    <input type="date" value={form.effectiveFrom} onChange={(e) => set('effectiveFrom', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Hiệu lực đến</label>
-                    <input type="date" value={form.effectiveTo} onChange={(e) => set('effectiveTo', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                </div>
-
-                {/* File */}
-                <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">File văn bản (PDF, DOCX, TXT — tối đa 20MB) <span className="text-red-500">*</span></label>
-                    <input
-                        type="file"
-                        accept=".pdf,.docx,.txt"
-                        onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        className="w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                        required
-                    />
-                </div>
-
-                <div className="md:col-span-2 flex justify-end">
-                    <button
-                        type="submit"
-                        disabled={submitting}
-                        className="bg-[#003b73] hover:bg-blue-800 disabled:bg-slate-300 text-white font-semibold px-6 py-2 rounded-xl text-sm transition-colors flex items-center gap-2"
-                    >
-                        {submitting && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
-                        {submitting ? 'Đang upload...' : 'Upload văn bản'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function KnowledgePage() {
     const { user } = useAuth();
     const role = user?.role;
-    const canUpload  = ['SYS_ADMIN', 'OFFICER'].includes(role);
     const canPublish = ['SYS_ADMIN', 'SIGNER'].includes(role);
     const canArchive = ['SYS_ADMIN', 'SIGNER'].includes(role);
     const canReindex = ['SYS_ADMIN', 'SIGNER'].includes(role);
@@ -298,9 +164,6 @@ export default function KnowledgePage() {
                     Quản lý quy chế, quyết định, thông báo và tài liệu dùng cho trợ lý học vụ AI.
                 </p>
             </div>
-
-            {/* Upload form (admin/officer only) */}
-            {canUpload && <UploadForm onUploaded={() => fetchDocs(1)} />}
 
             {/* Filters */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">
