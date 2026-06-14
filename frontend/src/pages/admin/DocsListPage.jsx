@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PlusCircle, Search, FileText, CheckCircle, Clock } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 const STATUS_BADGE = {
     ACTIVE: 'bg-green-100 text-green-700',
@@ -11,6 +12,7 @@ const STATUS_BADGE = {
 };
 
 export default function DocsListPage() {
+    const { user } = useAuth();
     const [docs, setDocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -31,6 +33,7 @@ export default function DocsListPage() {
         <div className="p-8">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Danh sách văn bằng</h1>
+                {['OFFICER', 'SYS_ADMIN'].includes(user?.role) && (
                 <Link
                     to="/admin/docs/new"
                     className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
@@ -38,6 +41,7 @@ export default function DocsListPage() {
                     <PlusCircle size={16} />
                     Tạo bản nháp
                 </Link>
+                )}
             </div>
 
             {/* Search */}
