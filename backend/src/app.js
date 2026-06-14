@@ -35,6 +35,7 @@ const verifyRoutes  = require('./routes/verifyRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const knowledgeRoutes = require('./routes/knowledgeRoutes');
 const aiRoutes      = require('./routes/aiRoutes');
+const userRoutes    = require('./routes/userRoutes');
 const { protect }   = require('./middlewares/authMiddleware');
 
 // Public shortlink redirect — đặt ngoài /api để URL ngắn gọn: /v/:code
@@ -47,6 +48,7 @@ app.get('/api/users/me', protect, (req, res) => {
 });
 
 app.use('/api/auth',      authRoutes);
+app.use('/api/users',     userRoutes);
 app.use('/api/docs',      docRoutes);
 app.use('/api/verify',    verifyRoutes);
 app.use('/api/student',   studentRoutes);

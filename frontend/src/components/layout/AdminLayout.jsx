@@ -10,10 +10,19 @@ const OFFICER_NAV = [
 ];
 
 const ADMIN_NAV = [
+    { to: '/admin/docs/new',  label: 'Create Draft',      icon: 'edit_document' },
     { to: '/admin/pending',   label: 'Pending Approval',   icon: 'pending_actions' },
     { to: '/admin/docs',      label: 'All Documents',      icon: 'folder_open' },
+    { to: '/admin/users',     label: 'Quan ly tai khoan',  icon: 'manage_accounts' },
     { to: '/admin/verify',    label: 'Xác thực',           icon: 'verified_user' },
     { to: '/admin/knowledge', label: 'Kho văn bản AI',     icon: 'library_books' },
+];
+
+const SIGNER_NAV = [
+    { to: '/admin/pending',   label: 'Pending Approval',   icon: 'pending_actions' },
+    { to: '/admin/docs',      label: 'All Documents',      icon: 'folder_open' },
+    { to: '/admin/verify',    label: 'Xac thuc',           icon: 'verified_user' },
+    { to: '/admin/knowledge', label: 'Kho van ban AI',     icon: 'library_books' },
 ];
 
 const ROLE_LABEL = {
@@ -27,9 +36,9 @@ export default function AdminLayout() {
     const navigate = useNavigate();
     const handleLogout = () => { logout(); navigate('/login'); };
 
-    const navItems = user?.role === 'OFFICER' ? OFFICER_NAV : ADMIN_NAV;
-    const homeRoute = user?.role === 'OFFICER' ? '/admin/docs/new' : '/admin/pending';
-    const dashboardLabel = user?.role === 'OFFICER' ? 'Staff Dashboard' : 'Admin Dashboard';
+    const navItems = user?.role === 'OFFICER' ? OFFICER_NAV : user?.role === 'SYS_ADMIN' ? ADMIN_NAV : SIGNER_NAV;
+    const homeRoute = user?.role === 'OFFICER' ? '/admin/docs/new' : user?.role === 'SYS_ADMIN' ? '/admin/users' : '/admin/pending';
+    const dashboardLabel = user?.role === 'OFFICER' ? 'Staff Dashboard' : user?.role === 'SYS_ADMIN' ? 'System Admin' : 'Signer Dashboard';
 
     return (
         <div className="flex h-screen bg-[#f7f9fb] overflow-hidden">
@@ -65,7 +74,7 @@ export default function AdminLayout() {
 
                 {/* Bottom */}
                 <div className="px-4 mt-auto space-y-1">
-                    {user?.role === 'OFFICER' && (
+                    {['OFFICER', 'SYS_ADMIN'].includes(user?.role) && (
                         <button
                             onClick={() => navigate('/admin/docs/new')}
                             className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 mb-4 transition-colors text-sm"

@@ -13,6 +13,7 @@ import DocDetailPage       from './pages/admin/DocDetailPage';
 import VerifyPage          from './pages/admin/VerifyPage';
 import PendingApprovalPage from './pages/admin/PendingApprovalPage';
 import KnowledgePage       from './pages/admin/KnowledgePage';
+import UsersPage           from './pages/admin/UsersPage';
 
 import StudentHomePage     from './pages/student/StudentHomePage';
 import StudentDiplomasPage from './pages/student/StudentDiplomasPage';
@@ -41,7 +42,7 @@ export default function App() {
 
                         {/* OFFICER: tạo bản nháp */}
                         <Route path="docs/new" element={
-                            <ProtectedRoute roles={['OFFICER']}>
+                            <ProtectedRoute roles={['OFFICER', 'SYS_ADMIN']}>
                                 <CreateDraftPage />
                             </ProtectedRoute>
                         } />
@@ -57,6 +58,11 @@ export default function App() {
                         <Route path="docs/:id" element={<DocDetailPage />} />
                         <Route path="verify" element={<VerifyPage />} />
                         <Route path="knowledge" element={<KnowledgePage />} />
+                        <Route path="users" element={
+                            <ProtectedRoute roles={['SYS_ADMIN']}>
+                                <UsersPage />
+                            </ProtectedRoute>
+                        } />
                     </Route>
 
                     {/* Student portal */}

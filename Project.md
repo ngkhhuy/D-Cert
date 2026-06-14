@@ -1,9 +1,9 @@
-# 🎓 D-CERT: HỆ THỐNG QUẢN LÝ, SỐ HÓA & XÁC THỰC VĂN BẰNG (BLOCKCHAIN + AI)
+# 🎓 D-CERT: HỆ THỐNG QUẢN LÝ, PHÁT HÀNH & XÁC THỰC VĂN BẰNG (BLOCKCHAIN + AI)
 
 **Định vị dự án:** Đồ án tốt nghiệp Kỹ sư - Chuyên ngành Hệ thống Thông tin, ĐH Bách Khoa Đà Nẵng.
 **Thời gian thực hiện:** 3 Tháng.
 **Môi trường phát triển:** Ubuntu (Native Dual-boot).
-**Mục tiêu:** Xây dựng nền tảng Web3 kết hợp AI Microservice để tự động hóa khâu số hóa dữ liệu và bảo chứng tính toàn vẹn của văn bản hành chính/văn bằng giáo dục.
+**Mục tiêu:** Xây dựng nền tảng Web3 kết hợp AI Microservice nhằm quản lý, phát hành, xác thực văn bằng và hỗ trợ sinh viên tra cứu thông tin học vụ dựa trên các tài liệu chính thức của nhà trường.
 
 ---
 
@@ -19,13 +19,17 @@
 - **Blockchain:** Mạng Ethereum Sepolia Testnet.
 - **Smart Contract:** Solidity (Viết hàm lưu trữ và thu hồi mã Hash).
 - **Tương tác chuỗi:** Ethers.js, Alchemy RPC.
-- **Lưu trữ phi tập trung:** IPFS (Pinata) để lưu trữ file PDF văn bằng.
+- **Lưu trữ file PDF:** Filesystem của máy chủ (`/public/uploads/`). Hỗ trợ tích hợp IPFS (Pinata) tùy chọn khi có cấu hình `PINATA_JWT`.
 
-### 1.3. Lớp Trí tuệ nhân tạo (AI Microservices)
-*Tối ưu hóa tài nguyên phần cứng, đảm bảo chạy mượt mà trên môi trường CPU cục bộ (cấu hình tương đương Dell Vostro 5620) mà không cần GPU chuyên dụng.*
+### 1.3. Lớp Trí tuệ nhân tạo – AI Knowledge Assistant
+
 - **Core:** Python, FastAPI.
-- **OCR & NER (Số hóa văn bản):** PaddleOCR (Đọc ảnh thành chữ) + PhoBERT (Bóc tách trường dữ liệu).
-- **Semantic Search (Chatbot Quy chế):** `bkai-foundation-models/vietnamese-bi-encoder` kết hợp CSDL Vector cục bộ FAISS.
+- **Document Processing:** PyMuPDF để trích xuất nội dung PDF.
+- **Embedding Model:** `bkai-foundation-models/vietnamese-bi-encoder`.
+- **Vector Database:** FAISS IndexFlatIP.
+- **Local LLM:** Qwen2.5 14B Instruct, tùy chỉnh với tên `dcert-qwen14b-vi`.
+- **LLM Runtime:** Ollama.
+- **Kiến trúc:** Retrieval-Augmented Generation – RAG.
 
 ---
 
@@ -33,25 +37,48 @@
 
 ### Bảng 1: `Users` (Quản trị Phân quyền - RBAC)
 - `username`, `password` (Hashed), `email`, `fullName`.
-- `role`: Enum ['SYS_ADMIN', 'OFFICER', 'SIGNER', 'STUDENT'] (Quản trị, chuyên viên tạo nháp, ban giám hiệu duyệt/ký, sinh viên).
-- `walletAddress`: String (Bắt buộc với role SIGNER để đối chiếu chữ ký Web3).
+- `role`: Enum ['SYS_ADMIN', 'OFFICER', 'SIGNER', 'STUDENT'].
+- `studentId`: String (Mã số sinh viên, liên kết với `Document.holderId`).
+- `walletAddress`: String (Dùng với role SIGNER để đối chiếu chữ ký Web3).
 - `status`: Enum ['ACTIVE', 'LOCKED'].
 
-### Bảng 2: `Documents` (Lưu trữ Văn bản/Bảng điểm)
+### Bảng 2: `Documents` (Lưu trữ Văn bản/Văn bằng)
 - `docId`: String (Unique) - Số hiệu văn bản (VD: BKDN-2026-001).
 - `docType`: Enum ['DIPLOMA', 'DECISION', 'TRANSCRIPT'].
+- `degreeLevel`: Enum ['BACHELOR', 'ENGINEER', 'ARCHITECT', 'MASTER', 'DOCTOR'] (Bắt buộc khi `docType = DIPLOMA`).
 - `holderName`: String (Tên sinh viên), `holderId`: String (Mã sinh viên).
-- `metadata`: Object - Dữ liệu linh hoạt (VD: Danh sách điểm các môn học, xếp loại).
-- `docHash`: String (Unique) - Mã băm SHA256 của file PDF gốc.
-- `ipfsHash`: String - Link file PDF lưu trên IPFS.
-- `txHash`: String - Mã giao dịch xác nhận trên Ethereum.
-- `issuer`: String - Tham chiếu đến User cấp phát.
+- `metadata`: Mixed - Dữ liệu linh hoạt (điểm số, môn học, xếp loại...).
+- `docHash`: String (Unique, sparse) - Mã băm SHA-256 của file PDF — sinh lúc issue.
+- `ipfsHash`: String - CID file PDF trên IPFS/Pinata (chỉ có khi có cấu hình Pinata JWT).
+- `txHash`: String - Hash giao dịch xác nhận trên Ethereum Sepolia.
+- `issuer`: ObjectId (Ref → User) - Người cấp phát.
 - `status`: Enum ['DRAFT', 'ACTIVE', 'REVOKED'].
+- `receivedAt`, `receivedBy`: Ghi nhận thời điểm sinh viên nhận/tải văn bằng.
 
 ### Bảng 3: `ShortLinks` (Module Rút gọn URL nội bộ)
 - `shortCode`: String (Unique) - Mã định danh 6 ký tự (VD: A7k9Xm).
-- `docHash`: String (Ref -> Documents) - Liên kết tới văn bản gốc.
+- `docHash`: String (Ref → Documents) - Liên kết tới văn bản gốc.
 - `clicks`: Number - Thống kê lượt tra cứu.
+
+### Bảng 4: `KnowledgeDocuments` (Kho tài liệu AI)
+- `title`: String - Tiêu đề tài liệu.
+- `type`: Enum ['REGULATION', 'DECISION', 'ANNOUNCEMENT', 'GUIDELINE', 'FAQ', 'OTHER'].
+- `fileUrl`, `filePath`, `originalFileName`, `mimeType`, `fileSize`: Thông tin file (PDF/DOCX/TXT, tối đa 20MB).
+- `sourceUnit`: String - Đơn vị ban hành (mặc định: 'Phòng Đào tạo').
+- `issuedDate`, `effectiveFrom`, `effectiveTo`: Ngày ban hành và hiệu lực.
+- `status`: Enum ['DRAFT', 'PUBLISHED', 'ARCHIVED'].
+- `aiIndexStatus`: Enum ['NOT_INDEXED', 'INDEXING', 'INDEXED', 'FAILED'].
+- `origin`: Enum ['MANUAL_UPLOAD', 'ISSUED_DOCUMENT'] - Nguồn gốc tài liệu.
+- `sourceDocument`: ObjectId (Ref → Document) - Nếu từ luồng issue văn bản.
+
+### Bảng 5: `ChatMessages` (Lịch sử hỏi đáp AI)
+- `user`: ObjectId (Ref → User).
+- `question`, `answer`: String.
+- `sources`: Array - Danh sách đoạn tài liệu trích dẫn.
+- `fallback`: Boolean - Đánh dấu nếu AI không tìm thấy ngữ cảnh.
+- `usedLlm`: Boolean - Đánh dấu nếu đã qua LLM.
+- `sessionId`: String - Định danh phiên chat.
+- `llmError`: String - Ghi lỗi nếu LLM thất bại.
 
 ---
 
@@ -62,20 +89,38 @@
 - `[GET] /api/users/me`: Lấy profile và role của user đang đăng nhập.
 
 ### Document & Web3 Module
-- `[POST] /api/docs/draft`: (OFFICER) Tạo nháp văn bản.
-- `[POST] /api/docs/issue/:id`: (SIGNER) Duyệt cấp phát -> Sinh PDF -> Đóng dấu QR -> Băm SHA256 -> Upload IPFS (nếu cấu hình Pinata) -> Ký Smart Contract -> Lưu DB.
-- `[POST] /api/docs/revoke/:id`: (SIGNER) Thu hồi văn bằng -> ghi trạng thái revoke lên Smart Contract -> cập nhật DB.
-- `[GET] /api/docs/:id`: Truy xuất chi tiết văn bản & lịch sử cấp phát.
+- `[GET] /api/docs`: Danh sách văn bản (có filter, phân trang).
+- `[GET] /api/docs/:id`: Chi tiết văn bản.
+- `[POST] /api/docs/draft`: (OFFICER, SYS_ADMIN) Tạo nháp thủ công.
+- `[POST] /api/docs/draft/upload`: (OFFICER, SYS_ADMIN) Tạo nháp từ file PDF upload.
+- `[POST] /api/docs/draft/import-csv`: (OFFICER, SYS_ADMIN) Import hàng loạt từ CSV.
+- `[POST] /api/docs/issue/:id`: (SIGNER, SYS_ADMIN) Phát hành: sinh PDF → đóng QR → băm SHA-256 → lưu filesystem máy chủ → upload IPFS (tùy chọn, cần `PINATA_JWT`) → ghi blockchain → lưu DB.
+- `[POST] /api/docs/issue/batch`: (SIGNER, SYS_ADMIN) Phát hành hàng loạt.
+- `[POST] /api/docs/revoke/:id`: (SIGNER, SYS_ADMIN) Thu hồi → ghi revoke lên Smart Contract → cập nhật DB.
+
+### Student Module
+- `[GET] /api/student/feed`: (STUDENT) Feed văn bản mới nhất (DECISION, TRANSCRIPT).
+- `[GET] /api/student/diplomas`: (STUDENT) Danh sách văn bằng cá nhân.
+- `[POST] /api/student/docs/:id/receive`: (STUDENT) Nhận/tải văn bằng, ghi log `receivedAt`.
 
 ### Verification & ShortLink Module
-- `[GET] /v/:shortCode`: Khớp mã rút gọn, redirect tới trang đối chiếu QR.
-- `[GET] /api/verify/code/:shortCode`: API tra cứu dữ liệu theo QR/shortCode.
-- `[GET] /api/verify/hash/:hash`: Đối chiếu hash trong DB và trạng thái hash trên mạng Ethereum.
-- `[POST] /api/verify/upload`: Tra cứu tính toàn vẹn bằng cách upload trực tiếp file PDF để băm lại.
+- `[GET] /v/:shortCode`: Redirect shortlink tới trang xác thực QR.
+- `[GET] /api/verify/code/:shortCode`: Tra cứu dữ liệu theo QR/shortCode.
+- `[GET] /api/verify/hash/:hash`: Đối chiếu hash trong DB và trạng thái on-chain trên Ethereum.
+- `[POST] /api/verify/upload`: Xác thực toàn vẹn bằng cách upload PDF, hệ thống băm lại và đối chiếu.
 
-### AI Integration Module (Gọi sang FastAPI)
-- `[POST] /api/ai/extract`: Upload ảnh văn bằng cũ -> Gọi Python xử lý OCR/NER -> Trả về JSON để điền form tự động.
-- `[POST] /api/ai/chat`: Gửi câu hỏi -> Gọi FAISS truy xuất ngữ nghĩa quy chế -> Trả về câu trả lời trích xuất. *(Ví dụ kịch bản test: "Điểm tổng kết môn Xử lý tín hiệu số là 3.9 thì có bị điểm F và phải học lại không?", "Điều kiện xét học bổng là gì?").*
+### Knowledge Module
+- `[GET] /api/knowledge`: Danh sách tài liệu (SYS_ADMIN, OFFICER, SIGNER).
+- `[GET] /api/knowledge/:id`: Chi tiết tài liệu.
+- `[POST] /api/knowledge/upload`: Upload tài liệu mới vào kho AI (PDF/DOCX/TXT, tối đa 20MB).
+- `[PATCH] /api/knowledge/:id/publish`: Xuất bản và gọi AI Service lập chỉ mục FAISS.
+- `[PATCH] /api/knowledge/:id/archive`: Lưu trữ, loại khỏi nguồn tra cứu.
+- `[POST] /api/knowledge/:id/reindex`: Lập chỉ mục lại tài liệu.
+
+### AI Chat Module
+- `[POST] /api/ai/chat`: (STUDENT, SYS_ADMIN) Nhận câu hỏi → RAG truy xuất FAISS → đưa context vào LLM → trả về câu trả lời + sources.
+- `[GET] /api/ai/history`: Lấy lịch sử hỏi đáp của phiên.
+- `[DELETE] /api/ai/history`: Xóa lịch sử hỏi đáp.
 
 ---
 
@@ -88,31 +133,32 @@
 - [x] Viết Utils: Hàm sinh `shortCode`, hàm băm PDF (SHA256).
 - [x] Hoàn thiện API Rút gọn Link và chuyển hướng (`/v/:code`).
 - [x] Tích hợp thư viện `pdf-lib` & `qrcode` để sinh văn bản tĩnh có dấu QR.
-- [ ] Test toàn bộ API CRUD bằng Postman.
+- [x] Test toàn bộ API CRUD bằng Postman.
 
 ### 🟡 GIAI ĐOẠN 2: TÍCH HỢP BLOCKCHAIN & FRONTEND (REACTJS)
 - [x] Viết Smart Contract `DocumentRegistry.sol` (Lưu & Hủy Hash).
-- [ ] Deploy Contract lên Ethereum Sepolia.
+- [x] Deploy Contract lên Ethereum Sepolia. (`CONTRACT_ADDRESS` đã có trong `.env`)
 - [x] Viết `BlockchainService` bằng `ethers.js` kết nối Smart Contract.
 - [x] Viết `IpfsService` upload file qua Pinata.
 - [x] Xây dựng ReactJS: Admin Dashboard (Đăng nhập, Quản lý sinh viên, Form cấp bằng).
 - [x] Xây dựng ReactJS: Public Verifier Portal (Giao diện tra cứu 1 chạm cho nhà tuyển dụng).
 
-### 🔴 GIAI ĐOẠN 3: AI KNOWLEDGE ASSISTANT
+### � GIAI ĐOẠN 3: AI KNOWLEDGE ASSISTANT
 
-- [ ] Dựng FastAPI AI Service.
-- [ ] Tạo model KnowledgeDocument trong backend.
-- [ ] Làm chức năng upload văn bản học vụ/quyết định/thông báo.
-- [ ] Làm trạng thái DRAFT / PUBLISHED / ARCHIVED.
-- [ ] Khi PUBLISHED thì gọi AI Service để index tài liệu.
-- [ ] AI Service đọc PDF, tách text.
-- [ ] Chunk text kèm metadata.
-- [ ] Tạo embedding bằng Sentence Transformers.
-- [ ] Lưu vector vào FAISS.
-- [ ] Làm API /chat.
-- [ ] Retrieve top-k đoạn liên quan.
-- [ ] Đưa context vào LLM để trả lời.
-- [ ] Trả về answer + sources.
-- [ ] Tích hợp chatbot vào Student Portal.
-- [ ] Lưu lịch sử hỏi đáp.
-- [ ] Có fallback khi không tìm thấy thông tin.
+- [x] Dựng FastAPI AI Service.
+- [x] Tạo model KnowledgeDocument trong backend.
+- [x] Làm chức năng upload văn bản học vụ/quyết định/thông báo.
+- [x] Làm trạng thái DRAFT / PUBLISHED / ARCHIVED.
+- [x] Khi PUBLISHED thì gọi AI Service để index tài liệu.
+- [x] AI Service đọc PDF, tách text (PyMuPDF).
+- [x] Chunk text kèm metadata.
+- [x] Tạo embedding bằng `bkai-foundation-models/vietnamese-bi-encoder`.
+- [x] Lưu vector vào FAISS (local storage).
+- [x] Làm API /chat.
+- [x] Retrieve top-k đoạn liên quan (RAG pipeline với threshold + rerank).
+- [x] Đưa context vào LLM để trả lời (Ollama `dcert-qwen14b-vi`).
+- [x] Trả về answer + sources.
+- [x] Tích hợp chatbot vào Student Portal.
+- [x] Lưu lịch sử hỏi đáp (`ChatMessage` model).
+- [x] Có fallback khi không tìm thấy thông tin.
+- [x] Generated chunks bổ sung kiến thức cấu trúc (điểm rèn luyện, học bổng, tiếng Anh đầu ra...).

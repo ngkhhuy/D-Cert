@@ -12,8 +12,9 @@ export default function DashboardPage() {
             navigate('/student', { replace: true });
         } else if (user.role === 'OFFICER') {
             navigate('/admin/docs/new', { replace: true });
+        } else if (user.role === 'SYS_ADMIN') {
+            navigate('/admin/users', { replace: true });
         } else {
-            // SYS_ADMIN, SIGNER
             navigate('/admin/pending', { replace: true });
         }
     }, [user, navigate]);
