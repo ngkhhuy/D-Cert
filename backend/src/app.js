@@ -39,8 +39,9 @@ const userRoutes    = require('./routes/userRoutes');
 const { protect }   = require('./middlewares/authMiddleware');
 
 // Public shortlink redirect — đặt ngoài /api để URL ngắn gọn: /v/:code
-const { redirectShortLink } = require('./controllers/verifyController');
+const { redirectShortLink, redirectVerifyPage } = require('./controllers/verifyController');
 app.get('/v/:shortCode', redirectShortLink);
+app.get('/verify', redirectVerifyPage);
 
 // Profile endpoint dùng cho AuthContext frontend
 app.get('/api/users/me', protect, (req, res) => {

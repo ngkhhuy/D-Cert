@@ -56,7 +56,7 @@ const updateUserStatus = async (req, res) => {
   try {
     const { status } = req.body;
     if (!['ACTIVE', 'LOCKED'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Trang thai khong hop le' });
+      return res.status(400).json({ success: false, message: 'TRẠNG THÁI khong hop le' });
     }
 
     if (req.params.id === req.user._id.toString() && status === 'LOCKED') {

@@ -166,7 +166,7 @@ const createDraft = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Create Draft Error:', error);
+        console.error('Tạo nháp Error:', error);
         res.status(500).json({ success: false, message: 'Lỗi máy chủ nội bộ khi tạo bản nháp' });
     }
 };
@@ -270,7 +270,7 @@ const createDraftFromUpload = async (req, res) => {
         if (stampedPath && fs.existsSync(stampedPath)) {
             fs.unlinkSync(stampedPath);
         }
-        console.error('Create Draft From Upload Error:', error);
+        console.error('Tạo nháp From Upload Error:', error);
         return res.status(500).json({ success: false, message: 'Lỗi máy chủ nội bộ khi tạo bản nháp từ PDF' });
     }
 };
