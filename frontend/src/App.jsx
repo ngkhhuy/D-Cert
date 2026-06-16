@@ -16,9 +16,11 @@ import KnowledgePage       from './pages/admin/KnowledgePage';
 import UsersPage           from './pages/admin/UsersPage';
 
 import StudentHomePage     from './pages/student/StudentHomePage';
+import StudentLoginPage    from './pages/student/StudentLoginPage';
 import StudentDiplomasPage from './pages/student/StudentDiplomasPage';
 import StudentRequestsPage from './pages/student/StudentRequestsPage';
 import ChatbotPage         from './pages/student/ChatbotPage';
+import HomePage            from './pages/public/HomePage';
 import VerifyPublicPage    from './pages/public/VerifyPublicPage';
 
 export default function App() {
@@ -28,7 +30,9 @@ export default function App() {
             <BrowserRouter>
                 <Routes>
                     {/* Public — không cần đăng nhập */}
+                    <Route path="/" element={<HomePage />} />
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/student/login" element={<StudentLoginPage />} />
                     <Route path="/verify" element={<VerifyPublicPage />} />
 
                     {/* Admin — cần đăng nhập */}
@@ -67,7 +71,7 @@ export default function App() {
 
                     {/* Student portal */}
                     <Route path="/student" element={
-                        <ProtectedRoute roles={['STUDENT']}>
+                        <ProtectedRoute roles={['STUDENT']} loginPath="/student/login">
                             <StudentLayout />
                         </ProtectedRoute>
                     }>
@@ -78,8 +82,7 @@ export default function App() {
                     </Route>
 
                     {/* Redirect gốc */}
-                    <Route path="/" element={<Navigate to="/admin" replace />} />
-                    <Route path="*" element={<Navigate to="/admin" replace />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>
