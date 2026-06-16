@@ -4,8 +4,15 @@ const ShortLink = require('../models/ShortLink');
 const { hashFile } = require('../utils/hashUtils');
 const blockchainService = require('../services/blockchainService');
 
+const isLocalBackendRequest = (req) => {
+    const host = req.get('host') || '';
+    return host.startsWith('localhost:3000') || host.startsWith('127.0.0.1:3000');
+};
+
 const getPublicVerifyUrl = (req, shortCode) => {
-    const baseUrl = process.env.FRONTEND_URL || process.env.PUBLIC_APP_URL || '';
+    const baseUrl = process.env.FRONTEND_URL
+        || process.env.PUBLIC_APP_URL
+        || (isLocalBackendRequest(req) ? 'http://localhost:5173' : '');
     const path = `/verify?code=${encodeURIComponent(shortCode)}`;
     return baseUrl ? `${baseUrl.replace(/\/$/, '')}${path}` : path;
 };
@@ -58,6 +65,20 @@ const redirectShortLink = async (req, res) => {
         console.error('ShortLink Redirect Error:', error);
         res.status(500).json({ success: false, message: 'Lỗi máy chủ nội bộ' });
     }
+};
+
+/**
+ * @route   GET /verify?code=:shortCode
+ * @desc    Tương thích với QR/link cũ trỏ thẳng vào backend, chuyển sang trang verify frontend
+ * @access  Public
+ */
+const redirectVerifyPage = async (req, res) => {
+    const shortCode = req.query.code || req.query.shortCode;
+    if (!shortCode) {
+        return res.status(400).json({ success: false, message: 'Thiếu mã xác thực trên URL' });
+    }
+
+    return res.redirect(302, getPublicVerifyUrl(req, String(shortCode)));
 };
 
 /**
@@ -191,4 +212,4 @@ const buildVerifyResponse = async (doc) => {
     };
 };
 
-module.exports = { redirectShortLink, verifyByCode, verifyByHash, verifyByUpload };
+module.exports = { redirectShortLink, redirectVerifyPage, verifyByCode, verifyByHash, verifyByUpload };

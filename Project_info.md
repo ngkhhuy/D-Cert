@@ -4,7 +4,7 @@
 
 D-CERT la he thong web phuc vu quan ly, phat hanh va xac thuc van bang/chung chi trong moi truong giao duc dai hoc. Du an duoc xay dung cho do an tot nghiep chuyen nganh He thong Thong tin, tap trung vao bai toan chong gia mao van bang, so hoa quy trinh cap phat va ho tro nguoi dung ben ngoai xac minh tinh toan ven cua tai lieu.
 
-Y tuong cot loi cua he thong la: file PDF van bang sau khi duoc ky duyet se duoc bam SHA-256, sau do ma bam nay duoc ghi len smart contract tren Ethereum Sepolia. Khi can xac thuc, he thong bam lai file PDF nguoi dung upload va doi chieu voi du lieu da luu trong MongoDB va trang thai on-chain. Neu file bi sua du chi mot byte, hash se thay doi va viec xac thuc se that bai.
+Y tuong cot loi cua he thong la: file PDF van bang sau khi duoc ky duyet se duoc bam SHA-256, sau do ma bam nay duoc ghi len smart contract tren Ethereum Sepolia. Khi can xac thuc, he thong bam lai file PDF nguoi dung upload va doi chieu voi du lieu da luu trong MongoDB va TRẠNG THÁI on-chain. Neu file bi sua du chi mot byte, hash se thay doi va viec xac thuc se that bai.
 
 Du an duoc chia thanh 3 lop:
 
@@ -86,7 +86,7 @@ Blockchain nam trong `blockchain/`, su dung:
 - ethers.js.
 - Ethereum Sepolia testnet.
 
-Smart contract chinh la `DocumentRegistry.sol`, co nhiem vu luu hash van bang va trang thai hop le/thu hoi.
+Smart contract chinh la `DocumentRegistry.sol`, co nhiem vu luu hash van bang va TRẠNG THÁI hop le/thu hoi.
 
 ## 4. Vai tro nguoi dung
 
@@ -133,7 +133,7 @@ Ban nhap duoc luu trong collection `documents` voi `status = DRAFT`. O giai doan
 5. Backend bam SHA-256 file PDF cuoi cung.
 6. Neu co cau hinh Pinata, backend upload PDF len IPFS va luu `ipfsHash`.
 7. Backend goi smart contract `issueDocument(bytes32 docHash)`.
-8. Smart contract luu hash, issuer, timestamp, trang thai valid.
+8. Smart contract luu hash, issuer, timestamp, TRẠNG THÁI valid.
 9. Backend luu `docHash`, `txHash`, `ipfsHash`, doi `status = ACTIVE`.
 10. Backend tao `ShortLink` lien ket QR voi document.
 
@@ -141,7 +141,7 @@ Ket qua la mot file PDF da phat hanh tai `/uploads/<docId>.pdf`.
 
 ### 5.4 Phat hanh hang loat
 
-Trang pending approval cho phep chon nhieu document `DRAFT` va goi:
+Trang Chờ xác thực cho phep chon nhieu document `DRAFT` va goi:
 
 ```http
 POST /api/docs/issue/batch
@@ -175,7 +175,7 @@ Nguoi ngoai co 2 cach xac thuc:
    - Frontend gui PDF len `/api/verify/upload`.
    - Backend bam SHA-256 file upload.
    - Backend tim document co `docHash` trung khop.
-   - Backend goi smart contract de lay trang thai on-chain.
+   - Backend goi smart contract de lay TRẠNG THÁI on-chain.
 
 Ket qua xac thuc gom:
 
@@ -183,8 +183,8 @@ Ket qua xac thuc gom:
 - `docHash`.
 - `txHash`.
 - `ipfsHash` neu co.
-- Trang thai trong DB.
-- Trang thai on-chain: valid, issuer, issuedAt.
+- TRẠNG THÁI trong DB.
+- TRẠNG THÁI on-chain: valid, issuer, issuedAt.
 
 ## 6. Mo hinh du lieu
 
@@ -194,7 +194,7 @@ Collection `users` gom:
 
 - `username`: ten dang nhap, unique.
 - `password`: mat khau da hash.
-- `fullName`: ho ten.
+- `fullName`: Họ Tên.
 - `email`: email, unique.
 - `role`: `SYS_ADMIN`, `OFFICER`, `SIGNER`, `STUDENT`.
 - `studentId`: ma sinh vien, dung de map voi `Document.holderId`.
@@ -251,7 +251,7 @@ Ham chinh:
 
 - `issueDocument(bytes32 _docHash)`: admin contract ghi hash moi.
 - `revokeDocument(bytes32 _docHash)`: admin contract thu hoi hash.
-- `verifyDocument(bytes32 _docHash)`: bat ky ai cung co the doc trang thai hash.
+- `verifyDocument(bytes32 _docHash)`: bat ky ai cung co the doc TRẠNG THÁI hash.
 
 Contract chi luu `bytes32` thay vi string de toi uu gas. Backend chuyen SHA-256 hex string thanh `0x...` truoc khi goi contract.
 
@@ -371,7 +371,7 @@ Sau khi deploy, copy `CONTRACT_ADDRESS` sang `backend/.env`.
 - `/verify`: trang public verifier.
 - `/verify?code=:shortCode`: mo tu QR trong PDF.
 
-## 11. Trang thai hoan thien giai doan 1 va 2
+## 11. TRẠNG THÁI hoan thien giai doan 1 va 2
 
 ### Da hoan thien
 
@@ -404,7 +404,7 @@ Sau khi deploy, copy `CONTRACT_ADDRESS` sang `backend/.env`.
 - Tao du lieu user mau cho cac role.
 - Test end-to-end bang Postman/browser:
   - login,
-  - create draft,
+  - Tạo nháp,
   - issue,
   - open PDF,
   - scan QR,

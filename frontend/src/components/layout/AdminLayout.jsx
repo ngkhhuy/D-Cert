@@ -3,24 +3,24 @@ import { useAuth } from '../../context/AuthContext';
 
 // Nav items theo role
 const OFFICER_NAV = [
-    { to: '/admin/docs/new',  label: 'Create Draft',      icon: 'edit_document' },
+    { to: '/admin/docs/new',  label: 'Tạo nháp',      icon: 'edit_document' },
     { to: '/admin/docs',      label: 'History',            icon: 'history' },
     { to: '/admin/verify',    label: 'Xác thực',           icon: 'verified_user' },
     { to: '/admin/knowledge', label: 'Kho văn bản AI',     icon: 'library_books' },
 ];
 
 const ADMIN_NAV = [
-    { to: '/admin/docs/new',  label: 'Create Draft',      icon: 'edit_document' },
-    { to: '/admin/pending',   label: 'Pending Approval',   icon: 'pending_actions' },
-    { to: '/admin/docs',      label: 'All Documents',      icon: 'folder_open' },
-    { to: '/admin/users',     label: 'Quan ly tai khoan',  icon: 'manage_accounts' },
+    { to: '/admin/docs/new',  label: 'Tạo nháp',      icon: 'edit_document' },
+    { to: '/admin/pending',   label: 'Chờ xác thực',   icon: 'pending_actions' },
+    { to: '/admin/docs',      label: 'Tất cả văn bằng',      icon: 'folder_open' },
+    { to: '/admin/users',     label: 'Quản lý tài khoản',  icon: 'manage_accounts' },
     { to: '/admin/verify',    label: 'Xác thực',           icon: 'verified_user' },
     { to: '/admin/knowledge', label: 'Kho văn bản AI',     icon: 'library_books' },
 ];
 
 const SIGNER_NAV = [
-    { to: '/admin/pending',   label: 'Pending Approval',   icon: 'pending_actions' },
-    { to: '/admin/docs',      label: 'All Documents',      icon: 'folder_open' },
+    { to: '/admin/pending',   label: 'Chờ xác thực',   icon: 'pending_actions' },
+    { to: '/admin/docs',      label: 'Tất cả văn bằng',      icon: 'folder_open' },
     { to: '/admin/verify',    label: 'Xac thuc',           icon: 'verified_user' },
     { to: '/admin/knowledge', label: 'Kho van ban AI',     icon: 'library_books' },
 ];

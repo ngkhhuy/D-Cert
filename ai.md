@@ -34,7 +34,7 @@ Nguyen tac quan trong:
 
 - Frontend chi goi Express qua prefix `/api`.
 - Frontend khong goi truc tiep FastAPI.
-- Backend Express la cong vao nghiep vu, role, logging chat va trang thai index.
+- Backend Express la cong vao nghiep vu, role, logging chat va TRẠNG THÁI index.
 - AI service xu ly retrieval va generation.
 
 ### 2.1 So do tong quan
@@ -72,7 +72,7 @@ flowchart LR
 | File | Vai tro |
 | --- | --- |
 | `backend/src/routes/knowledgeRoutes.js` | Route upload, list, publish, archive, reindex van ban |
-| `backend/src/controllers/knowledgeController.js` | Xu ly vong doi KnowledgeDocument va trang thai AI index |
+| `backend/src/controllers/knowledgeController.js` | Xu ly vong doi KnowledgeDocument va TRẠNG THÁI AI index |
 | `backend/src/services/aiService.js` | Backend goi FastAPI de ingest/archive |
 | `backend/src/services/knowledgeSyncService.js` | Tao KnowledgeDocument tu PDF da issue va ingest AI ma khong lam hong issue flow |
 | `backend/src/routes/aiRoutes.js` | Route Express cho chat |
@@ -96,7 +96,7 @@ flowchart LR
 | `ai-service/app/services/rag_service.py` | Orchestrate ingest va answer flow |
 | `ai-service/app/services/llm_service.py` | Goi Ollama de tong hop cau tra loi grounded |
 
-## 4. Du lieu va trang thai
+## 4. Du lieu va TRẠNG THÁI
 
 ## 4.1 KnowledgeDocument trong MongoDB
 
@@ -119,7 +119,7 @@ Thong tin nghiep vu chinh:
 | `publishedBy`, `publishedAt` | Nguoi publish va thoi diem publish |
 | `archivedBy`, `archivedAt` | Nguoi archive va thoi diem archive |
 
-Trang thai van ban:
+TRẠNG THÁI van ban:
 
 | Status | Y nghia |
 | --- | --- |
@@ -127,7 +127,7 @@ Trang thai van ban:
 | `PUBLISHED` | Da cong khai va duoc phep index vao AI |
 | `ARCHIVED` | Da luu tru, khong nen duoc chatbot uu tien su dung |
 
-Trang thai AI index:
+TRẠNG THÁI AI index:
 
 | AI index status | Y nghia |
 | --- | --- |
@@ -241,7 +241,7 @@ FastAPI con co endpoint:
 
 ## 6. Luong 1: Upload van ban vao kho AI
 
-Upload truc tiep o Kho van ban AI chua phai la index. Upload chi tao van ban backend o trang thai draft. Ngoai luong upload knowledge thu cong nay, Create Draft upload PDF co the luu cau hinh `knowledgeSync`; tai lieu do chi duoc tao thanh `KnowledgeDocument` va ingest sau khi SIGNER issue thanh cong.
+Upload truc tiep o Kho van ban AI chua phai la index. Upload chi tao van ban backend o TRẠNG THÁI draft. Ngoai luong upload knowledge thu cong nay, Tạo nháp upload PDF co the luu cau hinh `knowledgeSync`; tai lieu do chi duoc tao thanh `KnowledgeDocument` va ingest sau khi SIGNER issue thanh cong.
 
 ```mermaid
 sequenceDiagram
@@ -342,7 +342,7 @@ Khi `PATCH /api/knowledge/:id/publish`:
 
 ### 7.3 Tu dong dua PDF da issue vao Kho van ban AI
 
-Neu OFFICER tick tuy chon trong Create Draft upload:
+Neu OFFICER tick tuy chon trong Tạo nháp upload:
 
 ```text
 Sau khi phat hanh, them tai lieu nay vao Kho van ban AI
@@ -866,7 +866,7 @@ Backend:
 
 ## 16.3 Bien gioi service
 
-Trang thai hien tai:
+TRẠNG THÁI hien tai:
 
 - Frontend khong biet FastAPI URL.
 - Backend goi FastAPI bang `AI_SERVICE_URL`.
@@ -1007,7 +1007,7 @@ Neu viet bao cao tien do, co the trinh bay cac muc da co:
 1. Dang nhap bang `OFFICER` hoac `SYS_ADMIN`.
 2. Vao `/admin/knowledge`.
 3. Upload mot PDF hoc vu.
-4. Thay van ban o trang thai:
+4. Thay van ban o TRẠNG THÁI:
    - `DRAFT`
    - `NOT_INDEXED`
 5. Dang nhap vai tro `SIGNER` hoac `SYS_ADMIN`.
@@ -1174,4 +1174,4 @@ Co the tach phan bao cao AI thanh cac muc:
 
 ## 26. Tom tat mot doan de dua vao bao cao
 
-Phan AI cua D-CERT hien duoc xay dung theo mo hinh RAG cho kho van ban hoc vu. Backend Express quan ly vong doi van ban, phan quyen nguoi dung va lam gateway den FastAPI AI service. Khi mot van ban PDF duoc publish, AI service doc text theo trang, chia noi dung thanh cac chunk co ngu nghia tot hon cho van ban hanh chinh tieng Viet, tao embedding bang mo hinh Vietnamese bi-encoder va luu vao FAISS kem metadata nguon. Khi sinh vien dat cau hoi, he thong ma hoa cau hoi, truy xuat cac chunk lien quan, loc theo score, trang thai publish va hieu luc van ban, sau do dua context hop le cho Ollama de tong hop cau tra loi co nguon tham khao. Neu khong tim thay nguon, he thong tra fallback; neu LLM loi nhung retrieval van co ket qua, he thong van tra loi dua tren doan tai lieu lien quan. Cach thiet ke nay giup chatbot bam vao van ban da cong khai va dong thoi cho phep quan tri, kiem chung, reindex va archive tri thuc AI tu giao dien he thong.
+Phan AI cua D-CERT hien duoc xay dung theo mo hinh RAG cho kho van ban hoc vu. Backend Express quan ly vong doi van ban, phan quyen nguoi dung va lam gateway den FastAPI AI service. Khi mot van ban PDF duoc publish, AI service doc text theo trang, chia noi dung thanh cac chunk co ngu nghia tot hon cho van ban hanh chinh tieng Viet, tao embedding bang mo hinh Vietnamese bi-encoder va luu vao FAISS kem metadata nguon. Khi sinh vien dat cau hoi, he thong ma hoa cau hoi, truy xuat cac chunk lien quan, loc theo score, TRẠNG THÁI publish va hieu luc van ban, sau do dua context hop le cho Ollama de tong hop cau tra loi co nguon tham khao. Neu khong tim thay nguon, he thong tra fallback; neu LLM loi nhung retrieval van co ket qua, he thong van tra loi dua tren doan tai lieu lien quan. Cach thiet ke nay giup chatbot bam vao van ban da cong khai va dong thoi cho phep quan tri, kiem chung, reindex va archive tri thuc AI tu giao dien he thong.

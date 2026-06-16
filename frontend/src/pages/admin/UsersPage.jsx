@@ -62,11 +62,11 @@ export default function UsersPage() {
             };
 
             await api.post('/users', payload);
-            toast.success('Da tao tai khoan');
+            toast.success('Da Tạo tài khoản');
             setForm(emptyForm);
             fetchUsers();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Tao tai khoan that bai');
+            toast.error(err.response?.data?.message || 'Tạo tài khoản that bai');
         } finally {
             setSaving(false);
         }
@@ -86,17 +86,16 @@ export default function UsersPage() {
     return (
         <div className="p-8 space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-800">Quan ly tai khoan</h1>
+                <h1 className="text-2xl font-bold text-gray-800">Quản lý tài khoản</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    Chuc nang rieng cho SYS_ADMIN: tao user theo role va khoa/mo khoa tai khoan.
-                </p>
+                    Chức năng dành cho SYS_ADMIN                </p>
             </div>
 
             <form onSubmit={handleCreate} className="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Username"
                         value={form.username} onChange={(e) => updateForm('username', e.target.value)} required />
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ho ten"
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Họ Tên"
                         value={form.fullName} onChange={(e) => updateForm('fullName', e.target.value)} required />
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Email"
                         type="email" value={form.email} onChange={(e) => updateForm('email', e.target.value)} required />
@@ -114,7 +113,7 @@ export default function UsersPage() {
                         value={form.walletAddress} onChange={(e) => updateForm('walletAddress', e.target.value)} />
                     <button type="submit" disabled={saving}
                         className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-                        {saving ? 'Dang tao...' : 'Tao tai khoan'}
+                        {saving ? 'Dang tao...' : 'Tạo tài khoản'}
                     </button>
                 </div>
             </form>
@@ -129,11 +128,11 @@ export default function UsersPage() {
                         <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wider">
                             <tr>
                                 <th className="px-5 py-3 text-left">Username</th>
-                                <th className="px-5 py-3 text-left">Ho ten</th>
+                                <th className="px-5 py-3 text-left">Họ Tên</th>
                                 <th className="px-5 py-3 text-left">Email</th>
                                 <th className="px-5 py-3 text-left">Role</th>
-                                <th className="px-5 py-3 text-left">Trang thai</th>
-                                <th className="px-5 py-3 text-right">Hanh dong</th>
+                                <th className="px-5 py-3 text-left">TRẠNG THÁI</th>
+                                <th className="px-5 py-3 text-right">HÀNH ĐỘNG</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
