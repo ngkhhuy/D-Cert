@@ -422,6 +422,55 @@ const getDocById = async (req, res) => {
 };
 
 /**
+ * @route   GET /api/docs/:id/preview-pdf
+ * @desc    Xem trước PDF bản nháp. Draft tạo từ form sẽ sinh PDF preview bằng layout chính thức.
+ * @access  Private
+ */
+const previewDraftPdf = async (req, res) => {
+    let previewPath = null;
+    try {
+        const doc = await Document.findById(req.params.id);
+        if (!doc) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy văn bản' });
+        }
+        if (doc.status !== 'DRAFT') {
+            return res.status(400).json({ success: false, message: 'Chỉ hỗ trợ xem trước PDF cho bản nháp chờ duyệt' });
+        }
+
+        const uploadDir = path.join(__dirname, '../../public/uploads');
+        const uploadedStoredName = doc.metadata?.sourcePdf?.storedName;
+
+        if (uploadedStoredName) {
+            const uploadedDraftPath = path.join(uploadDir, 'drafts', uploadedStoredName);
+            if (!fs.existsSync(uploadedDraftPath)) {
+                return res.status(404).json({ success: false, message: 'Không tìm thấy file PDF bản nháp đã upload' });
+            }
+            return res.sendFile(uploadedDraftPath);
+        }
+
+        const tmpDir = path.join(uploadDir, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+        previewPath = path.join(tmpDir, `preview-${doc._id}-${Date.now()}.pdf`);
+        const previewUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/preview/draft/${doc.docId}`;
+        await generateCertificatePDF(doc.toObject(), previewPath, previewUrl);
+
+        return res.sendFile(previewPath, (error) => {
+            if (previewPath && fs.existsSync(previewPath)) {
+                fs.unlinkSync(previewPath);
+            }
+            if (error) {
+                console.error('Preview Draft PDF sendFile Error:', error);
+            }
+        });
+    } catch (error) {
+        if (previewPath && fs.existsSync(previewPath)) fs.unlinkSync(previewPath);
+        console.error('Preview Draft PDF Error:', error);
+        return res.status(500).json({ success: false, message: error.message || 'Không thể sinh PDF xem trước' });
+    }
+};
+
+/**
  * @route   GET /api/student/feed
  * @desc    Lấy danh sách văn bản đã phát hành gần đây (DECISION, TRANSCRIPT) cho SV xem
  * @access  Private (STUDENT)
@@ -751,6 +800,7 @@ module.exports = {
     revokeDocument,
     getAllDocs,
     getDocById,
+    previewDraftPdf,
     getStudentFeed,
     getMyDiplomas,
     receiveDocument,
