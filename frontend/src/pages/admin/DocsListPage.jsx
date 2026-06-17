@@ -33,7 +33,7 @@ export default function DocsListPage() {
         <div className="p-8">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Danh sách văn bằng</h1>
-                {['OFFICER', 'SYS_ADMIN'].includes(user?.role) && (
+                {user?.role === 'OFFICER' && (
                 <Link
                     to="/admin/docs/new"
                     className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"

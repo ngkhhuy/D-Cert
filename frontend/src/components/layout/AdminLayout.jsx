@@ -10,7 +10,6 @@ const OFFICER_NAV = [
 ];
 
 const ADMIN_NAV = [
-    { to: '/admin/docs/new',  label: 'Tạo nháp',      icon: 'edit_document' },
     { to: '/admin/pending',   label: 'Chờ xác thực',   icon: 'pending_actions' },
     { to: '/admin/docs',      label: 'Tất cả văn bằng',      icon: 'folder_open' },
     { to: '/admin/users',     label: 'Quản lý tài khoản',  icon: 'manage_accounts' },
@@ -74,7 +73,7 @@ export default function AdminLayout() {
 
                 {/* Bottom */}
                 <div className="px-4 mt-auto space-y-1">
-                    {['OFFICER', 'SYS_ADMIN'].includes(user?.role) && (
+                    {user?.role === 'OFFICER' && (
                         <button
                             onClick={() => navigate('/admin/docs/new')}
                             className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 mb-4 transition-colors text-sm"
@@ -84,10 +83,6 @@ export default function AdminLayout() {
                             New Certificate
                         </button>
                     )}
-                    <button className="flex items-center gap-3 px-4 py-3 text-blue-100/80 hover:bg-white/10 rounded-lg transition-all w-full text-sm">
-                        <span className="material-symbols-outlined text-[20px]">settings</span>
-                        Settings
-                    </button>
                     <button
                         onClick={handleLogout}
                         className="flex items-center gap-3 px-4 py-3 text-blue-100/80 hover:bg-white/10 rounded-lg transition-all w-full text-sm"
@@ -111,15 +106,6 @@ export default function AdminLayout() {
                             />
                         </div>
                         <div className="flex items-center gap-6 ml-8">
-                            <div className="flex items-center gap-1">
-                                <button className="p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-colors relative">
-                                    <span className="material-symbols-outlined text-[22px]">notifications</span>
-                                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                                </button>
-                                <button className="p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-colors">
-                                    <span className="material-symbols-outlined text-[22px]">help</span>
-                                </button>
-                            </div>
                             <div className="flex items-center gap-3 pl-6 border-l border-slate-200">
                                 <div className="text-right">
                                     <p className="text-sm font-semibold text-[#003b73]">{user?.fullName || user?.username}</p>
