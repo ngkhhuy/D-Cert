@@ -471,6 +471,43 @@ const previewDraftPdf = async (req, res) => {
 };
 
 /**
+ * @route   DELETE /api/docs/:id
+ * @desc    Xóa bản nháp chưa phát hành. Không cho xóa văn bằng ACTIVE/REVOKED.
+ * @access  Private (OFFICER hoặc SYS_ADMIN)
+ */
+const deleteDraftDocument = async (req, res) => {
+    try {
+        const doc = await Document.findById(req.params.id);
+        if (!doc) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy văn bản' });
+        }
+        if (doc.status !== 'DRAFT') {
+            return res.status(400).json({
+                success: false,
+                message: 'Chỉ có thể xóa bản nháp chưa phát hành. Văn bằng đã phát hành/thu hồi phải được lưu lịch sử.',
+            });
+        }
+
+        const uploadedStoredName = doc.metadata?.sourcePdf?.storedName;
+        if (uploadedStoredName) {
+            const draftPath = path.join(__dirname, '../../public/uploads/drafts', uploadedStoredName);
+            if (fs.existsSync(draftPath)) fs.unlinkSync(draftPath);
+        }
+
+        await doc.deleteOne();
+
+        return res.json({
+            success: true,
+            message: 'Đã xóa bản nháp thành công',
+            data: { id: req.params.id, docId: doc.docId },
+        });
+    } catch (error) {
+        console.error('Delete Draft Error:', error);
+        return res.status(500).json({ success: false, message: error.message || 'Lỗi máy chủ nội bộ khi xóa bản nháp' });
+    }
+};
+
+/**
  * @route   GET /api/student/feed
  * @desc    Lấy danh sách văn bản đã phát hành gần đây (DECISION, TRANSCRIPT) cho SV xem
  * @access  Private (STUDENT)
@@ -801,6 +838,7 @@ module.exports = {
     getAllDocs,
     getDocById,
     previewDraftPdf,
+    deleteDraftDocument,
     getStudentFeed,
     getMyDiplomas,
     receiveDocument,

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Zap, ExternalLink, FileDown, Ban, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Zap, ExternalLink, FileDown, Ban, ShieldCheck, Trash2 } from 'lucide-react';
 
 const STATUS_BADGE = {
     ACTIVE:  'bg-green-100 text-green-700',
@@ -19,6 +19,7 @@ export default function DocDetailPage() {
     const [loading, setLoading] = useState(true);
     const [issuing, setIssuing] = useState(false);
     const [revoking, setRevoking] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         api.get(`/docs/${id}`)
@@ -71,6 +72,21 @@ export default function DocDetailPage() {
         }
     };
 
+    const handleDeleteDraft = async () => {
+        if (issuing || revoking || deleting) return;
+        if (!confirm(`Xóa bản nháp ${doc.docId}? Thao tác này không thể hoàn tác.`)) return;
+        setDeleting(true);
+        try {
+            await api.delete(`/docs/${id}`);
+            toast.success('Đã xóa bản nháp');
+            navigate('/admin/docs');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Không thể xóa bản nháp');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     if (loading) return (
         <div className="flex justify-center py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
@@ -83,6 +99,7 @@ export default function DocDetailPage() {
 
     const canIssue = doc.status === 'DRAFT' && ['SIGNER', 'SYS_ADMIN'].includes(user?.role);
     const canRevoke = doc.status === 'ACTIVE' && ['SIGNER', 'SYS_ADMIN'].includes(user?.role);
+    const canDeleteDraft = doc.status === 'DRAFT' && ['OFFICER', 'SYS_ADMIN'].includes(user?.role);
 
     return (
         <div className="p-8 max-w-3xl">
@@ -111,6 +128,13 @@ export default function DocDetailPage() {
                             className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
                             <Ban size={16} />
                             {revoking ? 'Đang thu hồi...' : 'Thu hồi'}
+                        </button>
+                    )}
+                    {canDeleteDraft && (
+                        <button onClick={handleDeleteDraft} disabled={issuing || revoking || deleting}
+                            className="flex items-center gap-2 border border-red-200 bg-white hover:bg-red-50 disabled:opacity-60 text-red-600 font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
+                            <Trash2 size={16} />
+                            {deleting ? 'Đang xóa...' : 'Xóa bản nháp'}
                         </button>
                     )}
                 </div>

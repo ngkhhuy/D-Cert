@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusCircle, Search, FileText, CheckCircle, Clock } from 'lucide-react';
+import { PlusCircle, Search, FileText, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -15,14 +15,39 @@ export default function DocsListPage() {
     const { user } = useAuth();
     const [docs, setDocs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deletingId, setDeletingId] = useState(null);
     const [search, setSearch] = useState('');
 
-    useEffect(() => {
+    const fetchDocs = () => {
+        setLoading(true);
         api.get('/docs')
             .then((res) => setDocs(res.data.data || []))
             .catch(() => toast.error('Không thể tải danh sách văn bằng'))
             .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        fetchDocs();
     }, []);
+
+    const canDeleteDrafts = ['OFFICER', 'SYS_ADMIN'].includes(user?.role);
+
+    const handleDeleteDraft = async (doc) => {
+        if (deletingId) return;
+        const ok = window.confirm(`Xóa bản nháp ${doc.docId}? Thao tác này không thể hoàn tác.`);
+        if (!ok) return;
+
+        setDeletingId(doc._id);
+        try {
+            await api.delete(`/docs/${doc._id}`);
+            setDocs((current) => current.filter((item) => item._id !== doc._id));
+            toast.success('Đã xóa bản nháp');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Không thể xóa bản nháp');
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     const filtered = docs.filter((d) =>
         d.docId?.toLowerCase().includes(search.toLowerCase()) ||
@@ -93,12 +118,25 @@ export default function DocsListPage() {
                                         {new Date(doc.createdAt).toLocaleDateString('vi-VN')}
                                     </td>
                                     <td className="px-5 py-3">
-                                        <Link
-                                            to={`/admin/docs/${doc._id}`}
-                                            className="text-blue-600 hover:underline text-xs font-medium"
-                                        >
-                                            Chi tiết →
-                                        </Link>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <Link
+                                                to={`/admin/docs/${doc._id}`}
+                                                className="text-blue-600 hover:underline text-xs font-medium"
+                                            >
+                                                Chi tiết →
+                                            </Link>
+                                            {canDeleteDrafts && doc.status === 'DRAFT' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteDraft(doc)}
+                                                    disabled={deletingId === doc._id}
+                                                    className="inline-flex items-center justify-center rounded-md p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                                                    title="Xóa bản nháp"
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
