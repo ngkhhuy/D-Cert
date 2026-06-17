@@ -6,6 +6,7 @@ import tempfile
 from typing import Optional
 import unicodedata
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -25,6 +26,7 @@ FINAL_CONTEXTS = 5
 RECENCY_SCORE_DELTA = 0.05
 MAX_EXCERPT_LENGTH = 350
 MAX_CONTEXT_PREVIEW_LENGTH = 900
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Ho_Chi_Minh")
 
 logger = logging.getLogger(__name__)
 
@@ -234,9 +236,17 @@ def _parse_date(value) -> Optional[date]:
         return None
 
 
+def _today() -> date:
+    try:
+        return datetime.now(ZoneInfo(APP_TIMEZONE)).date()
+    except ZoneInfoNotFoundError:
+        logger.warning("Timezone không hợp lệ: %s. Fallback sang ngày hệ thống.", APP_TIMEZONE)
+        return date.today()
+
+
 def _is_effective(item: dict) -> bool:
     """Return True when a document chunk is currently effective."""
-    today = date.today()
+    today = _today()
     effective_from = _parse_date(item.get("effective_from"))
     effective_to = _parse_date(item.get("effective_to"))
 
