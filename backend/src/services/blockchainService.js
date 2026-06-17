@@ -8,6 +8,9 @@ const CONTRACT_ABI = [
 
 const TX_WAIT_TIMEOUT_MS = Number(process.env.TX_WAIT_TIMEOUT_MS || 180000);
 const GAS_FEE_MULTIPLIER = BigInt(process.env.GAS_FEE_MULTIPLIER || 2);
+const WAIT_FOR_CHAIN_CONFIRMATION = process.env.WAIT_FOR_CHAIN_CONFIRMATION !== 'false';
+const MIN_PRIORITY_FEE_GWEI = process.env.MIN_PRIORITY_FEE_GWEI || '2';
+const MIN_MAX_FEE_GWEI = process.env.MIN_MAX_FEE_GWEI || '30';
 
 const withTimeout = (promise, ms, label) => Promise.race([
     promise,
@@ -41,28 +44,70 @@ function getReadonlyContract() {
 async function getGasOverrides(contract) {
     const feeData = await contract.runner.provider.getFeeData();
     const overrides = {};
+    const minPriorityFee = ethers.parseUnits(MIN_PRIORITY_FEE_GWEI, 'gwei');
+    const minMaxFee = ethers.parseUnits(MIN_MAX_FEE_GWEI, 'gwei');
+    const maxBigInt = (...values) => values.reduce((max, value) => (value > max ? value : max), 0n);
 
     if (feeData.maxFeePerGas) {
-        overrides.maxFeePerGas = feeData.maxFeePerGas * GAS_FEE_MULTIPLIER;
+        overrides.maxFeePerGas = maxBigInt(
+            feeData.maxFeePerGas * GAS_FEE_MULTIPLIER,
+            minMaxFee
+        );
     }
     if (feeData.maxPriorityFeePerGas) {
-        overrides.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas * GAS_FEE_MULTIPLIER;
+        overrides.maxPriorityFeePerGas = maxBigInt(
+            feeData.maxPriorityFeePerGas * GAS_FEE_MULTIPLIER,
+            minPriorityFee
+        );
     }
-    if (!overrides.maxFeePerGas && feeData.gasPrice) {
-        overrides.gasPrice = feeData.gasPrice * GAS_FEE_MULTIPLIER;
+    if (overrides.maxPriorityFeePerGas && overrides.maxFeePerGas) {
+        overrides.maxFeePerGas = maxBigInt(
+            overrides.maxFeePerGas,
+            overrides.maxPriorityFeePerGas * 2n
+        );
+    }
+    if (!overrides.maxFeePerGas && !overrides.maxPriorityFeePerGas && feeData.gasPrice) {
+        overrides.gasPrice = maxBigInt(
+            feeData.gasPrice * GAS_FEE_MULTIPLIER,
+            minMaxFee
+        );
     }
 
+    console.log('[blockchain] gas overrides', Object.fromEntries(
+        Object.entries(overrides).map(([key, value]) => [key, ethers.formatUnits(value, 'gwei')])
+    ));
+
     return overrides;
+}
+
+async function assertNonceReady(contract) {
+    const signer = contract.runner;
+    const provider = signer.provider;
+    const address = await signer.getAddress();
+    const [latestNonce, pendingNonce] = await Promise.all([
+        provider.getTransactionCount(address, 'latest'),
+        provider.getTransactionCount(address, 'pending'),
+    ]);
+
+    if (pendingNonce > latestNonce) {
+        throw new Error(`Ví ký đang có transaction pending (latestNonce=${latestNonce}, pendingNonce=${pendingNonce}). Vui lòng chờ hoặc clear nonce trước khi ký tiếp.`);
+    }
 }
 
 const issueOnChain = async (docHash) => {
     const contract = getSignerContract();
     const bytes32Hash = `0x${docHash}`;
+    await assertNonceReady(contract);
     const gasOverrides = await getGasOverrides(contract);
 
     console.log(`[blockchain] sending issue tx hash=${bytes32Hash}`);
     const tx = await contract.issueDocument(bytes32Hash, gasOverrides);
     console.log(`[blockchain] issue tx sent txHash=${tx.hash}`);
+
+    if (!WAIT_FOR_CHAIN_CONFIRMATION) {
+        console.log(`[blockchain] issue tx broadcast only txHash=${tx.hash}`);
+        return tx.hash;
+    }
 
     const receipt = await withTimeout(
         tx.wait(),
@@ -77,11 +122,17 @@ const issueOnChain = async (docHash) => {
 const revokeOnChain = async (docHash) => {
     const contract = getSignerContract();
     const bytes32Hash = `0x${docHash}`;
+    await assertNonceReady(contract);
     const gasOverrides = await getGasOverrides(contract);
 
     console.log(`[blockchain] sending revoke tx hash=${bytes32Hash}`);
     const tx = await contract.revokeDocument(bytes32Hash, gasOverrides);
     console.log(`[blockchain] revoke tx sent txHash=${tx.hash}`);
+
+    if (!WAIT_FOR_CHAIN_CONFIRMATION) {
+        console.log(`[blockchain] revoke tx broadcast only txHash=${tx.hash}`);
+        return tx.hash;
+    }
 
     const receipt = await withTimeout(
         tx.wait(),
