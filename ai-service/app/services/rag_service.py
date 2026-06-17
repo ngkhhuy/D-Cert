@@ -2,8 +2,12 @@ from datetime import date, datetime
 import logging
 import os
 import re
+import tempfile
 from typing import Optional
 import unicodedata
+from urllib.parse import urlparse
+
+import requests
 
 from app.schemas.ingest_schema import IngestRequest
 from app.services.chunker import chunk_text
@@ -14,6 +18,7 @@ from app.services.vector_store import add_vectors, load_metadata, remove_documen
 
 
 SUPPORTED_EXTENSIONS = {".pdf"}
+DOWNLOAD_TIMEOUT_SECONDS = 60
 RETRIEVAL_THRESHOLD = 0.30
 TOP_K = 12
 FINAL_CONTEXTS = 5
@@ -82,11 +87,43 @@ def _ensure_supported_file(file_path: str) -> str:
     return file_path
 
 
+def _download_pdf(file_url: str) -> str:
+    parsed = urlparse(file_url)
+    extension = os.path.splitext(parsed.path)[1].lower() or ".pdf"
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise ValueError("Hiện tại chỉ hỗ trợ index file PDF.")
+
+    response = requests.get(file_url, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+    response.raise_for_status()
+
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=extension)
+    try:
+        tmp_file.write(response.content)
+        return tmp_file.name
+    finally:
+        tmp_file.close()
+
+
+def _resolve_ingest_file(req: IngestRequest) -> tuple[str, bool]:
+    if req.file_url:
+        return _download_pdf(req.file_url), True
+    if req.file_path:
+        return _ensure_supported_file(req.file_path), False
+    raise ValueError("Thiếu file_url hoặc file_path để index tài liệu.")
+
+
 def ingest_document(req: IngestRequest) -> dict:
     """Read a PDF, chunk text, embed chunks, and store them in FAISS."""
-    _ensure_supported_file(req.file_path)
+    file_path, is_temp_file = _resolve_ingest_file(req)
+    try:
+        pages = load_pdf_pages(file_path)
+    finally:
+        if is_temp_file:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                logger.warning("Không thể xóa file tạm: %s", file_path)
 
-    pages = load_pdf_pages(req.file_path)
     if not pages:
         return {
             "success": False,

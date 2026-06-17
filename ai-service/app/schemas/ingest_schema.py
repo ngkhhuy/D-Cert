@@ -7,7 +7,8 @@ class IngestRequest(BaseModel):
     document_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
     type: str = Field(..., min_length=1)
-    file_path: str = Field(..., min_length=1)
+    file_path: Optional[str] = None
+    file_url: Optional[str] = None
     source_unit: Optional[str] = None
     issued_date: Optional[str] = None
     effective_from: Optional[str] = None

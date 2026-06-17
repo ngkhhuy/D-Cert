@@ -2,6 +2,12 @@ const path = require('path');
 const axios = require('axios');
 
 const getAiServiceUrl = () => (process.env.AI_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
+const getPublicAppUrl = () => (
+    process.env.PUBLIC_APP_URL
+    || process.env.FRONTEND_URL
+    || process.env.BASE_URL
+    || ''
+).replace(/\/$/, '');
 
 const normalizeDate = (value) => {
     if (!value) return null;
@@ -10,16 +16,22 @@ const normalizeDate = (value) => {
 
 /**
  * Ask the FastAPI AI service to ingest a published knowledge document.
- * The AI service runs on the same local machine during development, so it
- * receives the absolute file path instead of a multipart file upload.
+ * Prefer a public file URL so the AI service can run on another machine
+ * such as RunPod. Keep file_path as a local fallback for development.
  */
 const ingestKnowledgeDocument = async (doc) => {
     const filePath = path.resolve(doc.filePath);
+    const publicAppUrl = getPublicAppUrl();
+    const fileUrl = publicAppUrl && doc.fileUrl
+        ? `${publicAppUrl}${doc.fileUrl.startsWith('/') ? '' : '/'}${doc.fileUrl}`
+        : null;
+
     const body = {
         document_id: doc._id.toString(),
         title: doc.title,
         type: doc.type,
         file_path: filePath,
+        file_url: fileUrl,
         source_unit: doc.sourceUnit,
         issued_date: normalizeDate(doc.issuedDate),
         effective_from: normalizeDate(doc.effectiveFrom),
