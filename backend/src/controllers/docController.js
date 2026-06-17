@@ -284,6 +284,7 @@ const issueDocument = async (req, res) => {
     let outputPath = null;
     let uploadedDraftPath = null;
     try {
+        console.log(`[issue] start documentId=${req.params.id} user=${req.user?.username || req.user?._id}`);
         // Bước 1: Lấy bản nháp, kiểm tra tồn tại và trạng thái
         const doc = await Document.findById(req.params.id);
         if (!doc) {
@@ -321,15 +322,19 @@ const issueDocument = async (req, res) => {
         }
 
         // Bước 4: Băm SHA256 file PDF vừa sinh
+        console.log(`[issue] hashing PDF docId=${doc.docId}`);
         const docHash = await hashFile(outputPath);
 
         // Bước 5: Upload PDF lên IPFS nếu đã cấu hình Pinata
+        console.log(`[issue] uploading IPFS if configured docId=${doc.docId}`);
         const ipfsHash = await uploadIssuedPdfToIpfs(outputPath, doc.docId);
 
         // Bước 6: Ghi hash lên Sepolia Blockchain
+        console.log(`[issue] writing blockchain docId=${doc.docId} hash=${docHash}`);
         const txHash = await blockchainService.issueOnChain(docHash);
 
         // Bước 7: Cập nhật Document trong DB
+        console.log(`[issue] saving document docId=${doc.docId} txHash=${txHash}`);
         doc.docHash  = docHash;
         doc.ipfsHash = ipfsHash || doc.ipfsHash;
         doc.txHash   = txHash;

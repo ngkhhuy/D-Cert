@@ -1,64 +1,81 @@
 const { ethers } = require('ethers');
 
-// ABI tối giản — chỉ các hàm cần dùng
-// Lưu ý: ethers v6 không chấp nhận từ khóa "nonpayable" trong human-readable ABI
 const CONTRACT_ABI = [
-    "function issueDocument(bytes32 _docHash)",
-    "function revokeDocument(bytes32 _docHash)",
-    "function verifyDocument(bytes32 _docHash) view returns (bool isValid, address issuer, uint256 timestamp)",
+    'function issueDocument(bytes32 _docHash)',
+    'function revokeDocument(bytes32 _docHash)',
+    'function verifyDocument(bytes32 _docHash) view returns (bool isValid, address issuer, uint256 timestamp)',
 ];
 
-/**
- * Tạo contract instance có Signer (dùng cho issueDocument, revokeDocument)
- */
+const TX_WAIT_TIMEOUT_MS = Number(process.env.TX_WAIT_TIMEOUT_MS || 180000);
+
+const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`${label} quá thời gian chờ ${Math.round(ms / 1000)} giây`)), ms);
+    }),
+]);
+
+function assertBlockchainEnv() {
+    if (!process.env.ALCHEMY_RPC_URL) throw new Error('Thiếu ALCHEMY_RPC_URL');
+    if (!process.env.SIGNER_PRIVATE_KEY) throw new Error('Thiếu SIGNER_PRIVATE_KEY');
+    if (!process.env.CONTRACT_ADDRESS) throw new Error('Thiếu CONTRACT_ADDRESS');
+}
+
+function getProvider() {
+    assertBlockchainEnv();
+    return new ethers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL);
+}
+
 function getSignerContract() {
-    const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL);
+    const provider = getProvider();
     const signer = new ethers.Wallet(process.env.SIGNER_PRIVATE_KEY, provider);
     return new ethers.Contract(process.env.CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 }
 
-/**
- * Tạo contract instance chỉ đọc (dùng cho verifyDocument)
- */
 function getReadonlyContract() {
-    const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL);
+    const provider = getProvider();
     return new ethers.Contract(process.env.CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }
 
-/**
- * Ghi hash văn bằng lên Sepolia, trả về txHash đã được xác nhận
- * @param {string} docHash - SHA256 hex string 64 ký tự (không có 0x)
- * @returns {Promise<string>} txHash giao dịch
- */
 const issueOnChain = async (docHash) => {
     const contract = getSignerContract();
-    const bytes32Hash = '0x' + docHash;
+    const bytes32Hash = `0x${docHash}`;
+
+    console.log(`[blockchain] sending issue tx hash=${bytes32Hash}`);
     const tx = await contract.issueDocument(bytes32Hash);
-    const receipt = await tx.wait();
-    return receipt.hash;
+    console.log(`[blockchain] issue tx sent txHash=${tx.hash}`);
+
+    const receipt = await withTimeout(
+        tx.wait(),
+        TX_WAIT_TIMEOUT_MS,
+        `Chờ xác nhận transaction issue ${tx.hash}`
+    );
+    console.log(`[blockchain] issue tx confirmed txHash=${receipt.hash || tx.hash} block=${receipt.blockNumber}`);
+
+    return receipt.hash || tx.hash;
 };
 
-/**
- * Thu hồi văn bằng trên blockchain
- * @param {string} docHash - SHA256 hex string 64 ký tự (không có 0x)
- * @returns {Promise<string>} txHash giao dịch
- */
 const revokeOnChain = async (docHash) => {
     const contract = getSignerContract();
-    const bytes32Hash = '0x' + docHash;
+    const bytes32Hash = `0x${docHash}`;
+
+    console.log(`[blockchain] sending revoke tx hash=${bytes32Hash}`);
     const tx = await contract.revokeDocument(bytes32Hash);
-    const receipt = await tx.wait();
-    return receipt.hash;
+    console.log(`[blockchain] revoke tx sent txHash=${tx.hash}`);
+
+    const receipt = await withTimeout(
+        tx.wait(),
+        TX_WAIT_TIMEOUT_MS,
+        `Chờ xác nhận transaction revoke ${tx.hash}`
+    );
+    console.log(`[blockchain] revoke tx confirmed txHash=${receipt.hash || tx.hash} block=${receipt.blockNumber}`);
+
+    return receipt.hash || tx.hash;
 };
 
-/**
- * Tra cứu trạng thái văn bằng trên blockchain (không tốn gas)
- * @param {string} docHash - SHA256 hex string 64 ký tự (không có 0x)
- * @returns {Promise<{isValid: boolean, issuer: string, issuedAt: string|null}>}
- */
 const verifyOnChain = async (docHash) => {
     const contract = getReadonlyContract();
-    const bytes32Hash = '0x' + docHash;
+    const bytes32Hash = `0x${docHash}`;
     const [isValid, issuer, timestamp] = await contract.verifyDocument(bytes32Hash);
     return {
         isValid,

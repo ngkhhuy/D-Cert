@@ -46,7 +46,7 @@ export default function App() {
 
                         {/* OFFICER: tạo bản nháp */}
                         <Route path="docs/new" element={
-                            <ProtectedRoute roles={['OFFICER', 'SYS_ADMIN']}>
+                            <ProtectedRoute roles={['OFFICER']}>
                                 <CreateDraftPage />
                             </ProtectedRoute>
                         } />
