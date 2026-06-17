@@ -167,7 +167,7 @@ function DraftRow({ doc, onIssue, onPreview, issuingId, isSelected, onToggleSele
     );
 }
 
-function PendingPdfPreview({ selectedDoc, loading }) {
+function PendingPdfPreview({ selectedDoc, loading, pdfUrl, previewError }) {
     if (loading) {
         return (
             <div className="h-full bg-white rounded-xl border border-gray-100 flex items-center justify-center">
@@ -185,15 +185,12 @@ function PendingPdfPreview({ selectedDoc, loading }) {
         );
     }
 
-    const storedName = selectedDoc.metadata?.sourcePdf?.storedName;
-    const pdfUrl = storedName ? `/uploads/drafts/${storedName}` : null;
-
-    if (!pdfUrl) {
+    if (previewError) {
         return (
             <div className="h-full bg-white rounded-xl border border-gray-100 p-6">
                 <h4 className="text-sm font-semibold text-[#003b73] mb-3">Xem trước tài liệu</h4>
                 <div className="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm text-amber-700">
-                    Ho so nay duoc tao tu form, chua co file PDF upload de xem truc tiep.
+                    {previewError}
                 </div>
             </div>
         );
@@ -203,7 +200,7 @@ function PendingPdfPreview({ selectedDoc, loading }) {
         <div className="h-full bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                    <p className="text-xs text-gray-400">Dang duyet</p>
+                    <p className="text-xs text-gray-400">Đang duyệt</p>
                     <p className="text-sm font-semibold text-[#003b73] font-mono">{selectedDoc.docId}</p>
                 </div>
                 <a
@@ -212,7 +209,7 @@ function PendingPdfPreview({ selectedDoc, loading }) {
                     rel="noreferrer"
                     className="text-xs px-3 py-1.5 rounded-md bg-blue-50 text-[#003b73] hover:bg-blue-100 transition-colors"
                 >
-                    Mo tab moi
+                    Mở tab mới
                 </a>
             </div>
             <iframe title={`pdf-preview-${selectedDoc._id}`} src={pdfUrl} className="w-full h-[650px] bg-gray-50" />
@@ -266,6 +263,8 @@ export default function PendingApprovalPage() {
     const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'issued'
     const [selectedDocId, setSelectedDocId] = useState(null);
     const [selectedDocDetail, setSelectedDocDetail] = useState(null);
+    const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+    const [previewError, setPreviewError] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [batchLoading, setBatchLoading] = useState(false);
@@ -279,6 +278,10 @@ export default function PendingApprovalPage() {
     }, []);
 
     useEffect(() => { fetchDocs(); }, [fetchDocs]);
+
+    useEffect(() => () => {
+        if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+    }, [previewPdfUrl]);
 
     const pendingDocs = allDocs.filter((d) => d.status === 'DRAFT');
     const issuedDocs = allDocs.filter((d) => d.status === 'ACTIVE');
@@ -297,6 +300,11 @@ export default function PendingApprovalPage() {
             if (selectedDocId === confirmDoc._id) {
                 setSelectedDocId(null);
                 setSelectedDocDetail(null);
+                setPreviewError(null);
+                setPreviewPdfUrl((current) => {
+                    if (current) URL.revokeObjectURL(current);
+                    return null;
+                });
             }
             fetchDocs(); // reload
         } catch (err) {
@@ -309,11 +317,21 @@ export default function PendingApprovalPage() {
     const handleSelectPendingDoc = async (docId) => {
         setSelectedDocId(docId);
         setPreviewLoading(true);
+        setPreviewError(null);
+        setPreviewPdfUrl((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+        });
         try {
-            const res = await api.get(`/docs/${docId}`);
-            setSelectedDocDetail(res.data?.data || null);
+            const [detailRes, pdfRes] = await Promise.all([
+                api.get(`/docs/${docId}`),
+                api.get(`/docs/${docId}/preview-pdf`, { responseType: 'blob' }),
+            ]);
+            setSelectedDocDetail(detailRes.data?.data || null);
+            setPreviewPdfUrl(URL.createObjectURL(pdfRes.data));
         } catch {
             setSelectedDocDetail(null);
+            setPreviewError('Không thể sinh hoặc tải PDF xem trước cho hồ sơ này.');
             toast.error('Không thể tải nội dung tài liệu để xem trước');
         } finally {
             setPreviewLoading(false);
@@ -356,6 +374,11 @@ export default function PendingApprovalPage() {
             setSelectedIds(new Set());
             setSelectedDocId(null);
             setSelectedDocDetail(null);
+            setPreviewError(null);
+            setPreviewPdfUrl((current) => {
+                if (current) URL.revokeObjectURL(current);
+                return null;
+            });
             fetchDocs();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Lỗi batch issue');
@@ -532,6 +555,8 @@ export default function PendingApprovalPage() {
                                 <PendingPdfPreview
                                     selectedDoc={selectedDocDetail}
                                     loading={previewLoading}
+                                    pdfUrl={previewPdfUrl}
+                                    previewError={previewError}
                                 />
                             </div>
                         )}

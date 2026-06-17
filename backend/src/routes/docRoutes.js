@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, revokeDocument, getAllDocs, getDocById } = require('../controllers/docController');
+const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, revokeDocument, getAllDocs, getDocById, previewDraftPdf } = require('../controllers/docController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const draftUploadDir = path.join(__dirname, '../../public/uploads/drafts');
@@ -43,6 +43,7 @@ const handleUploadError = (err, req, res, next) => {
 
 // Lấy danh sách & chi tiết — mọi role đã đăng nhập
 router.get('/', protect, getAllDocs);
+router.get('/:id/preview-pdf', protect, previewDraftPdf);
 router.get('/:id', protect, getDocById);
 
 // Chỉ cho phép OFFICER (Giáo vụ) và SYS_ADMIN (Đào tạo) được phép tạo nháp
