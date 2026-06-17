@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, revokeDocument, getAllDocs, getDocById, previewDraftPdf } = require('../controllers/docController');
+const { createDraft, createDraftFromUpload, importDraftsFromCsv, issueDocument, batchIssue, revokeDocument, getAllDocs, getDocById, previewDraftPdf, deleteDraftDocument } = require('../controllers/docController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const draftUploadDir = path.join(__dirname, '../../public/uploads/drafts');
@@ -45,6 +45,7 @@ const handleUploadError = (err, req, res, next) => {
 router.get('/', protect, getAllDocs);
 router.get('/:id/preview-pdf', protect, previewDraftPdf);
 router.get('/:id', protect, getDocById);
+router.delete('/:id', protect, authorize('OFFICER', 'SYS_ADMIN'), deleteDraftDocument);
 
 // Chỉ cho phép OFFICER (Giáo vụ) và SYS_ADMIN (Đào tạo) được phép tạo nháp
 router.post('/draft', protect, authorize('OFFICER', 'SYS_ADMIN'), createDraft);
