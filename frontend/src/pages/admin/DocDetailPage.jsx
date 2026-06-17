@@ -28,6 +28,7 @@ export default function DocDetailPage() {
     }, [id]);
 
     const handleIssue = async () => {
+        if (issuing || revoking) return;
         if (!confirm('Xác nhận phát hành? Thao tác này sẽ ghi hash lên blockchain Sepolia và không thể hoàn tác.')) return;
         setIssuing(true);
         try {
@@ -45,6 +46,7 @@ export default function DocDetailPage() {
     };
 
     const handleRevoke = async () => {
+        if (issuing || revoking) return;
         if (!confirm('Xác nhận thu hồi văn bằng? Trạng thái on-chain sẽ chuyển sang không hợp lệ.')) return;
         setRevoking(true);
         try {
@@ -98,14 +100,14 @@ export default function DocDetailPage() {
                 </div>
                 <div className="flex gap-2">
                     {canIssue && (
-                        <button onClick={handleIssue} disabled={issuing}
+                        <button onClick={handleIssue} disabled={issuing || revoking}
                             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
                             <Zap size={16} />
                             {issuing ? 'Đang phát hành...' : 'Phát hành & Ký'}
                         </button>
                     )}
                     {canRevoke && (
-                        <button onClick={handleRevoke} disabled={revoking}
+                        <button onClick={handleRevoke} disabled={issuing || revoking}
                             className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
                             <Ban size={16} />
                             {revoking ? 'Đang thu hồi...' : 'Thu hồi'}

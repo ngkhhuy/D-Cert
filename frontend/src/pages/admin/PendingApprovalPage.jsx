@@ -285,6 +285,7 @@ export default function PendingApprovalPage() {
 
     const handleIssueConfirm = async () => {
         if (!confirmDoc) return;
+        if (issuingId !== null || batchLoading) return;
         setIssuingId(confirmDoc._id);
         setConfirmDoc(null);
         try {
@@ -338,6 +339,7 @@ export default function PendingApprovalPage() {
     const handleBatchIssue = async () => {
         const ids = [...selectedIds];
         if (!ids.length) return;
+        if (batchLoading || issuingId !== null) return;
         setBatchLoading(true);
         setBatchProgress({ done: 0, total: ids.length });
         try {
