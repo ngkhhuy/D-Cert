@@ -13,6 +13,8 @@ const blockchainService = require('../services/blockchainService');
 const ipfsService = require('../services/ipfsService');
 const { syncIssuedDocumentToKnowledge } = require('../services/knowledgeSyncService');
 
+const issuingLocks = new Set();
+
 /**
  * @route   POST /api/docs/draft
  * @desc    Tạo bản nháp văn bằng (Chưa có Hash, chưa lên Blockchain)
@@ -283,6 +285,14 @@ const createDraftFromUpload = async (req, res) => {
 const issueDocument = async (req, res) => {
     let outputPath = null;
     let uploadedDraftPath = null;
+    const lockKey = String(req.params.id);
+    if (issuingLocks.has(lockKey)) {
+        return res.status(409).json({
+            success: false,
+            message: 'Văn bằng này đang được ký duyệt. Vui lòng chờ giao dịch hiện tại hoàn tất.',
+        });
+    }
+    issuingLocks.add(lockKey);
     try {
         console.log(`[issue] start documentId=${req.params.id} user=${req.user?.username || req.user?._id}`);
         // Bước 1: Lấy bản nháp, kiểm tra tồn tại và trạng thái
@@ -374,6 +384,8 @@ const issueDocument = async (req, res) => {
         if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
         console.error('Issue Document Error:', error);
         res.status(500).json({ success: false, message: error.message || 'Lỗi máy chủ nội bộ khi phát hành văn bằng' });
+    } finally {
+        issuingLocks.delete(lockKey);
     }
 };
 
@@ -609,65 +621,79 @@ const batchIssue = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Tối đa 50 văn bằng mỗi lần batch' });
     }
 
+    const lockedId = ids.find((id) => issuingLocks.has(String(id)));
+    if (lockedId) {
+        return res.status(409).json({
+            success: false,
+            message: 'Một hoặc nhiều văn bằng đang được ký duyệt. Vui lòng chờ giao dịch hiện tại hoàn tất.',
+        });
+    }
+
+    ids.forEach((id) => issuingLocks.add(String(id)));
+
     const uploadDir = path.join(__dirname, '../../public/uploads');
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
     const results = { success: [], errors: [] };
 
-    for (const id of ids) {
-        let outputPath = null;
-        let uploadedDraftPath = null;
-        try {
-            const doc = await Document.findById(id);
-            if (!doc) { results.errors.push({ id, reason: 'Không tìm thấy document' }); continue; }
-            if (doc.status !== 'DRAFT') { results.errors.push({ id, docId: doc.docId, reason: `Trạng thái không hợp lệ: ${doc.status}` }); continue; }
+    try {
+        for (const id of ids) {
+            let outputPath = null;
+            let uploadedDraftPath = null;
+            try {
+                const doc = await Document.findById(id);
+                if (!doc) { results.errors.push({ id, reason: 'Không tìm thấy document' }); continue; }
+                if (doc.status !== 'DRAFT') { results.errors.push({ id, docId: doc.docId, reason: `Trạng thái không hợp lệ: ${doc.status}` }); continue; }
 
-            const shortCode = generateShortCode(6);
-            const verifyUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/v/${shortCode}`;
+                const shortCode = generateShortCode(6);
+                const verifyUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/v/${shortCode}`;
 
-            outputPath = path.join(uploadDir, `${doc.docId}.pdf`);
+                outputPath = path.join(uploadDir, `${doc.docId}.pdf`);
 
-            const uploadedStoredName = doc.metadata?.sourcePdf?.storedName;
-            if (uploadedStoredName) {
-                uploadedDraftPath = path.join(uploadDir, 'drafts', uploadedStoredName);
-                if (!fs.existsSync(uploadedDraftPath)) {
-                    results.errors.push({ id, docId: doc.docId, reason: 'Không tìm thấy file PDF đã upload' });
-                    continue;
+                const uploadedStoredName = doc.metadata?.sourcePdf?.storedName;
+                if (uploadedStoredName) {
+                    uploadedDraftPath = path.join(uploadDir, 'drafts', uploadedStoredName);
+                    if (!fs.existsSync(uploadedDraftPath)) {
+                        results.errors.push({ id, docId: doc.docId, reason: 'Không tìm thấy file PDF đã upload' });
+                        continue;
+                    }
+                    fs.copyFileSync(uploadedDraftPath, outputPath);
+                    await stampPdfWithQr(outputPath, outputPath, verifyUrl);
+                } else {
+                    await generateCertificatePDF(doc.toObject(), outputPath, verifyUrl);
                 }
-                fs.copyFileSync(uploadedDraftPath, outputPath);
-                await stampPdfWithQr(outputPath, outputPath, verifyUrl);
-            } else {
-                await generateCertificatePDF(doc.toObject(), outputPath, verifyUrl);
+
+                const docHash = await hashFile(outputPath);
+                const ipfsHash = await uploadIssuedPdfToIpfs(outputPath, doc.docId);
+                const txHash  = await blockchainService.issueOnChain(docHash);
+
+                doc.docHash = docHash;
+                doc.ipfsHash = ipfsHash || doc.ipfsHash;
+                doc.txHash  = txHash;
+                doc.status  = 'ACTIVE';
+                await doc.save();
+
+                await ShortLink.create({ shortCode, document: doc._id, docHash });
+
+                const knowledgeSync = await syncIssuedKnowledgeSafely(doc, outputPath, req.user._id);
+
+                if (uploadedDraftPath && fs.existsSync(uploadedDraftPath)) fs.unlinkSync(uploadedDraftPath);
+
+                results.success.push({ id, docId: doc.docId, holderName: doc.holderName, txHash, knowledgeSync });
+            } catch (err) {
+                if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+                results.errors.push({ id, reason: err.message || 'Lỗi không xác định' });
             }
-
-            const docHash = await hashFile(outputPath);
-            const ipfsHash = await uploadIssuedPdfToIpfs(outputPath, doc.docId);
-            const txHash  = await blockchainService.issueOnChain(docHash);
-
-            doc.docHash = docHash;
-            doc.ipfsHash = ipfsHash || doc.ipfsHash;
-            doc.txHash  = txHash;
-            doc.status  = 'ACTIVE';
-            await doc.save();
-
-            await ShortLink.create({ shortCode, document: doc._id, docHash });
-
-            const knowledgeSync = await syncIssuedKnowledgeSafely(doc, outputPath, req.user._id);
-
-            if (uploadedDraftPath && fs.existsSync(uploadedDraftPath)) fs.unlinkSync(uploadedDraftPath);
-
-            results.success.push({ id, docId: doc.docId, holderName: doc.holderName, txHash, knowledgeSync });
-        } catch (err) {
-            if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-            results.errors.push({ id, reason: err.message || 'Lỗi không xác định' });
         }
-    }
 
-    return res.status(207).json({
-        success: true,
-        message: `Batch hoàn tất: ${results.success.length} thành công, ${results.errors.length} lỗi`,
-        data: results,
-    });
+        return res.status(207).json({
+            success: true,
+            message: `Batch hoàn tất: ${results.success.length} thành công, ${results.errors.length} lỗi`,
+            data: results,
+        });
+    } finally {
+        ids.forEach((id) => issuingLocks.delete(String(id)));
+    }
 };
 
 /**
