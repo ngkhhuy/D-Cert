@@ -2,7 +2,7 @@
 
 Hệ thống quản lý, phát hành và xác thực văn bằng kết hợp Web3 + AI.
 
-D-CERT là đồ án tốt nghiệp (Kỹ sư - Chuyên ngành Hệ thống Thông tin) nhằm xây dựng một nền tảng cho phép: soạn thảo, phát hành PDF văn bằng/giấy tờ, ghi nhận mã băm trên blockchain (Ethereum Sepolia), cung cấp cổng xác thực công khai và một AI Knowledge Assistant để tra cứu/hỏi đáp về các văn bản học vụ.
+D-CERT là đồ án tốt nghiệp (Cử nhân - Chuyên ngành Hệ thống Thông tin) nhằm xây dựng một nền tảng cho phép: soạn thảo, phát hành PDF văn bằng/giấy tờ, ghi nhận mã băm trên blockchain (Ethereum Sepolia), cung cấp cổng xác thực công khai và một AI Knowledge Assistant để tra cứu/hỏi đáp về các văn bản học vụ.
 
 Tính năng chính
 
@@ -108,12 +108,8 @@ Tài liệu bổ sung
 
 License
 
-- (Thêm loại license nếu cần — hiện chưa có file LICENSE)
+None
 
 Người liên hệ
 
-- Tác giả / owner trên GitHub: @ngkhhuy
-
-
-----
-File README này được sinh tự động dựa trên nội dung hiện có trong repository. Nếu bạn muốn tôi bổ sung tiếng Anh, hướng dẫn deploy Docker/production, hoặc template .env đầy đủ, cho tôi biết để tôi cập nhật tiếp.
+- Tác giả: github.com/ngkhhuy
